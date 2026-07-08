@@ -1,6 +1,8 @@
 #ifndef DAYVAR_JSON_WRITER_H
 #define DAYVAR_JSON_WRITER_H
 
+#include "dbgeng_ops.h"
+
 #define DVS_JSON_OK 0
 #define DVS_JSON_ERROR (-1)
 
@@ -15,5 +17,14 @@ int DvsWritePcUpdate(
     unsigned long long runtime_module_base,
     const char *reason,
     int auto_live);
+int DvsWriteRegResponse(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long message_id,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const DVS_REGISTER_VALUE *values,
+    unsigned long value_count);
 
 #endif

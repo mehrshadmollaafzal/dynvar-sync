@@ -119,6 +119,7 @@ WinDbg:
 !dvs_connect 172.28.70.90 9100
 !dvs_status
 !dvs_pc
+!dvs_poll
 !dvs_disconnect
 ```
 
@@ -128,6 +129,8 @@ Expected broker logs include a registered `windbg` client and a routed
 ```text
 [broker] registered role=windbg
 [broker] route pc_update id=<n> windbg -> ida
+[broker] route reg_request id=<n> ida -> windbg
+[broker] route reg_response id=<n> windbg -> ida
 ```
 
 The fake IDA client should print a `pc_update` payload containing real
@@ -141,12 +144,28 @@ auto_live = true
 reason = dvs_pc
 ```
 
+For the auto-refresh register path:
+
+```text
+!dvs_pc
+  -> sends pc_update
+  -> briefly pumps broker messages
+  -> handles reg_request
+  -> sends reg_response
+```
+
+`reg_response` must preserve `pc_seq`, `request_id`, and `runtime_pc`. The
+extension currently supports these x64 registers:
+
+```text
+rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
+```
+
 Current limitations:
 
-- No `!dvs_poll`.
 - No `!dvs_step`.
-- No `reg_response`.
-- No `mem_response`.
+- No `mem_request` or `mem_response`.
+- No IDA API integration.
 - No real variable recovery.
 
 ## Future WinDbg Smoke Tests

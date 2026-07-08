@@ -1,5 +1,6 @@
 #include "dbgeng_ops.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -29,6 +30,53 @@ static void DvsCopyModuleName(char *dst, unsigned long dst_size, const char *src
     }
     strncpy(dst, src, dst_size - 1);
     dst[dst_size - 1] = '\0';
+}
+
+static int DvsAsciiEqualNoCase(const char *left, const char *right)
+{
+    while (*left != '\0' && *right != '\0') {
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*right)) {
+            return 0;
+        }
+        left++;
+        right++;
+    }
+    return *left == '\0' && *right == '\0';
+}
+
+static int DvsIsSupportedRegisterName(const char *name)
+{
+    static const char *supported[] = {
+        "rax", "rbx", "rcx", "rdx",
+        "rsi", "rdi", "rsp", "rbp",
+        "r8", "r9", "r10", "r11",
+        "r12", "r13", "r14", "r15",
+        "rip"
+    };
+    unsigned long i;
+
+    for (i = 0; i < sizeof(supported) / sizeof(supported[0]); i++) {
+        if (DvsAsciiEqualNoCase(name, supported[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static unsigned long long DvsDebugValueToU64(const DEBUG_VALUE *value)
+{
+    switch (value->Type) {
+    case DEBUG_VALUE_INT8:
+        return (unsigned long long)value->I8;
+    case DEBUG_VALUE_INT16:
+        return (unsigned long long)value->I16;
+    case DEBUG_VALUE_INT32:
+        return (unsigned long long)value->I32;
+    case DEBUG_VALUE_INT64:
+        return (unsigned long long)value->I64;
+    default:
+        return 0;
+    }
 }
 
 int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
@@ -115,6 +163,74 @@ int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
         return DVS_DBGENG_ERROR;
     }
 
+    DvsSetDbgEngLastErrorText("ok");
+    return DVS_DBGENG_OK;
+}
+
+int DvsReadRegisters(
+    PDEBUG_CLIENT client,
+    const char names[][DVS_REGISTER_NAME_MAX],
+    unsigned long count,
+    DVS_REGISTER_VALUE *values,
+    unsigned long *value_count)
+{
+    HRESULT hr;
+    PDEBUG_REGISTERS registers = NULL;
+    unsigned long i;
+    unsigned long out_count = 0;
+
+    if (client == NULL || names == NULL || values == NULL || value_count == NULL) {
+        DvsSetDbgEngLastErrorText("invalid register read arguments");
+        return DVS_DBGENG_ERROR;
+    }
+
+    *value_count = 0;
+
+    hr = client->lpVtbl->QueryInterface(
+        client,
+        &IID_IDebugRegisters,
+        (void **)&registers);
+    if (FAILED(hr) || registers == NULL) {
+        DvsSetDbgEngLastError("QueryInterface(IDebugRegisters) failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    for (i = 0; i < count && out_count < DVS_MAX_REGISTER_VALUES; i++) {
+        ULONG reg_index = 0;
+        DEBUG_VALUE value;
+
+        memset(&value, 0, sizeof(value));
+        memset(&values[out_count], 0, sizeof(values[out_count]));
+        strncpy(values[out_count].name, names[i], sizeof(values[out_count].name) - 1);
+        values[out_count].name[sizeof(values[out_count].name) - 1] = '\0';
+
+        if (!DvsIsSupportedRegisterName(names[i])) {
+            values[out_count].ok = 0;
+            out_count++;
+            continue;
+        }
+
+        hr = registers->lpVtbl->GetIndexByName(registers, names[i], &reg_index);
+        if (FAILED(hr)) {
+            values[out_count].ok = 0;
+            out_count++;
+            continue;
+        }
+
+        hr = registers->lpVtbl->GetValue(registers, reg_index, &value);
+        if (FAILED(hr)) {
+            values[out_count].ok = 0;
+            out_count++;
+            continue;
+        }
+
+        values[out_count].value = DvsDebugValueToU64(&value);
+        values[out_count].ok = 1;
+        out_count++;
+    }
+
+    registers->lpVtbl->Release(registers);
+    *value_count = out_count;
     DvsSetDbgEngLastErrorText("ok");
     return DVS_DBGENG_OK;
 }

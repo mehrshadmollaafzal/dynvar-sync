@@ -10,6 +10,7 @@ Implemented commands:
 !dvs_disconnect
 !dvs_status
 !dvs_pc
+!dvs_poll [max_messages]
 ```
 
 Behavior:
@@ -20,10 +21,18 @@ Behavior:
 - `!dvs_status` prints the current connection state.
 - `!dvs_pc` reads the current instruction pointer, containing module name, and
   runtime module base through DbgEng, then sends a `pc_update` message with a
-  monotonically increasing `pc_seq` and `auto_live=true`.
+  monotonically increasing `pc_seq` and `auto_live=true`. It then runs a short
+  bounded broker pump to handle immediate `reg_request` messages.
+- `!dvs_poll [max_messages]` manually runs the same bounded broker pump.
 
 DbgEng-specific lookup is isolated in `dbgeng_ops.c`. If PC/module/base lookup
 fails, `!dvs_pc` reports the DbgEng error and does not send guessed data.
+
+Register requests are handled with DbgEng register APIs. Supported registers:
+
+```text
+rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
+```
 
 ## Build Notes
 
@@ -87,6 +96,7 @@ WinDbg:
 !dvs_connect 172.28.70.90 9100
 !dvs_status
 !dvs_pc
+!dvs_poll
 !dvs_disconnect
 ```
 
@@ -94,12 +104,12 @@ Expected broker flow:
 
 ```text
 windbg extension -> broker -> fake_ida: pc_update
+fake_ida -> broker -> windbg extension: reg_request
+windbg extension -> broker -> fake_ida: reg_response
 ```
 
-The fake IDA client may reply with `ida_pc_mapped` and `reg_request`, but Phase
-2 does not implement a receive pump or register responses yet. The broker log
-or fake IDA output should show `pc_update` fields derived from the current
-debugger context:
+The broker log or fake IDA output should show `pc_update` fields derived from
+the current debugger context:
 
 ```text
 payload.pc
@@ -108,6 +118,15 @@ payload.runtime_module_base
 payload.auto_live = true
 payload.reason = dvs_pc
 ```
+
+`reg_response` preserves the request `pc_seq`, `request_id`, and `runtime_pc`.
+
+Current limitations:
+
+- No `mem_request` handling yet.
+- No stepping yet.
+- No real IDA API integration yet.
+- No Hex-Rays `v*` variable recovery yet.
 
 The extension must stay low-level. It must not parse Hex-Rays variables, infer
 decompiler semantics, block WinDbg forever, or guess values for unsupported

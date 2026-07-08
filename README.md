@@ -5,14 +5,14 @@ and WinDbg Preview for Windows x64 targets. It will synchronize the debugger's
 runtime PC with IDA and display confidence-tagged runtime values for supported
 Hex-Rays variables.
 
-Current status: WinDbg connection + DbgEng-derived PC sync. The Python broker
-can route JSONL/TCP messages, and the WinDbg extension can connect to the
-broker, send `hello`, report status, disconnect, and send a `pc_update` using
-the current instruction pointer, module name, and runtime module base from
-DbgEng.
+Current status: WinDbg connection, DbgEng-derived PC sync, and register
+responses. The Python broker can route JSONL/TCP messages, and the WinDbg
+extension can connect to the broker, send `hello`, report status, disconnect,
+send a `pc_update` using the current instruction pointer/module/base from
+DbgEng, briefly pump for `reg_request`, and send `reg_response`.
 
-Real IDA APIs, Hex-Rays APIs, stepping, polling, register responses, memory
-responses, and variable recovery are not implemented yet.
+Real IDA APIs, Hex-Rays APIs, stepping, memory responses, and variable recovery
+are not implemented yet.
 
 ## Architecture
 
@@ -105,12 +105,20 @@ WinDbg:
 !dvs_connect 172.28.70.90 9100
 !dvs_status
 !dvs_pc
+!dvs_poll
 !dvs_disconnect
 ```
 
 `!dvs_pc` sends DbgEng-derived `pc`, `module`, and `runtime_module_base` fields
 with `auto_live=true` and `reason=dvs_pc`. If DbgEng cannot provide those
 values, the command reports an error instead of sending guessed data.
+
+After sending `pc_update`, `!dvs_pc` runs a bounded pump that can answer
+`reg_request` with `reg_response`. Supported registers are:
+
+```text
+rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
+```
 
 ## MVP Goal
 
