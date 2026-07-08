@@ -22,7 +22,8 @@ Behavior:
 - `!dvs_pc` reads the current instruction pointer, containing module name, and
   runtime module base through DbgEng, then sends a `pc_update` message with a
   monotonically increasing `pc_seq` and `auto_live=true`. It then runs a short
-  bounded broker pump to handle immediate `reg_request` messages.
+  bounded broker pump to handle immediate `reg_request` and `mem_request`
+  messages.
 - `!dvs_poll [max_messages]` manually runs the same bounded broker pump.
 
 DbgEng-specific lookup is isolated in `dbgeng_ops.c`. If PC/module/base lookup
@@ -33,6 +34,10 @@ Register requests are handled with DbgEng register APIs. Supported registers:
 ```text
 rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
 ```
+
+Memory requests are handled with DbgEng virtual memory reads. Reads are capped
+at 4096 bytes and return `bytes_hex` in lowercase hex. Failed reads return a
+`mem_response` with `ok=false`.
 
 ## Build Notes
 
@@ -80,32 +85,34 @@ Broker port: 9100
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 0.0.0.0 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
+python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
 ```
 
 WinDbg:
 
 ```text
-.load path\to\windbg_ext\build\dayvar.dll
+.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
-!dvs_status
 !dvs_pc
-!dvs_poll
+!dvs_pc
 !dvs_disconnect
 ```
 
-Expected broker flow:
+Expected broker flow for each `!dvs_pc`:
 
 ```text
-windbg extension -> broker -> fake_ida: pc_update
-fake_ida -> broker -> windbg extension: reg_request
-windbg extension -> broker -> fake_ida: reg_response
+pc_update
+ida_pc_mapped
+reg_request
+reg_response
+mem_request
+mem_response
 ```
 
 The broker log or fake IDA output should show `pc_update` fields derived from
@@ -119,11 +126,11 @@ payload.auto_live = true
 payload.reason = dvs_pc
 ```
 
-`reg_response` preserves the request `pc_seq`, `request_id`, and `runtime_pc`.
+`reg_response` and `mem_response` preserve the request `pc_seq`, `request_id`,
+and `runtime_pc`.
 
 Current limitations:
 
-- No `mem_request` handling yet.
 - No stepping yet.
 - No real IDA API integration yet.
 - No Hex-Rays `v*` variable recovery yet.

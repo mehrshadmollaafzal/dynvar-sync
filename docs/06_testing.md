@@ -103,23 +103,22 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 0.0.0.0 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
+python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
 ```
 
 WinDbg:
 
 ```text
-.load path\to\windbg_ext\build\dayvar.dll
+.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
-!dvs_status
 !dvs_pc
-!dvs_poll
+!dvs_pc
 !dvs_disconnect
 ```
 
@@ -129,8 +128,11 @@ Expected broker logs include a registered `windbg` client and a routed
 ```text
 [broker] registered role=windbg
 [broker] route pc_update id=<n> windbg -> ida
+[broker] route ida_pc_mapped id=<n> ida -> windbg
 [broker] route reg_request id=<n> ida -> windbg
 [broker] route reg_response id=<n> windbg -> ida
+[broker] route mem_request id=<n> ida -> windbg
+[broker] route mem_response id=<n> windbg -> ida
 ```
 
 The fake IDA client should print a `pc_update` payload containing real
@@ -152,19 +154,29 @@ For the auto-refresh register path:
   -> briefly pumps broker messages
   -> handles reg_request
   -> sends reg_response
+  -> handles mem_request
+  -> sends mem_response
 ```
 
-`reg_response` must preserve `pc_seq`, `request_id`, and `runtime_pc`. The
-extension currently supports these x64 registers:
+`reg_response` and `mem_response` must preserve `pc_seq`, `request_id`, and
+`runtime_pc`. The extension currently supports these x64 registers:
 
 ```text
 rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
 ```
 
+The fake IDA client sends one `mem_request` after `reg_response`, using the
+returned `rsp` value and reading 8 bytes from that address. Expected fake IDA
+output includes:
+
+```text
+recv type=reg_response
+recv type=mem_response
+```
+
 Current limitations:
 
 - No `!dvs_step`.
-- No `mem_request` or `mem_response`.
 - No IDA API integration.
 - No real variable recovery.
 

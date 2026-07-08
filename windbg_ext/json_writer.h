@@ -26,5 +26,27 @@ int DvsWriteRegResponse(
     const char *runtime_pc,
     const DVS_REGISTER_VALUE *values,
     unsigned long value_count);
+int DvsWriteMemResponse(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long message_id,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const char *address,
+    unsigned long size,
+    const unsigned char *bytes,
+    unsigned long bytes_len);
+int DvsWriteMemErrorResponse(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long message_id,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const char *address,
+    unsigned long size,
+    const char *code,
+    const char *message);
 
 #endif

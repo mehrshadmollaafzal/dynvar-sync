@@ -234,3 +234,53 @@ int DvsReadRegisters(
     DvsSetDbgEngLastErrorText("ok");
     return DVS_DBGENG_OK;
 }
+
+int DvsReadVirtualMemory(
+    PDEBUG_CLIENT client,
+    unsigned long long address,
+    unsigned long size,
+    unsigned char *bytes,
+    unsigned long *bytes_read)
+{
+    HRESULT hr;
+    PDEBUG_DATA_SPACES data_spaces = NULL;
+    ULONG actual = 0;
+
+    if (client == NULL || bytes == NULL || bytes_read == NULL) {
+        DvsSetDbgEngLastErrorText("invalid memory read arguments");
+        return DVS_DBGENG_ERROR;
+    }
+
+    *bytes_read = 0;
+
+    if (size == 0 || size > DVS_MAX_MEMORY_READ_SIZE) {
+        DvsSetDbgEngLastErrorText("invalid memory read size");
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = client->lpVtbl->QueryInterface(
+        client,
+        &IID_IDebugDataSpaces,
+        (void **)&data_spaces);
+    if (FAILED(hr) || data_spaces == NULL) {
+        DvsSetDbgEngLastError("QueryInterface(IDebugDataSpaces) failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = data_spaces->lpVtbl->ReadVirtual(data_spaces, address, bytes, size, &actual);
+    data_spaces->lpVtbl->Release(data_spaces);
+    if (FAILED(hr)) {
+        DvsSetDbgEngLastError("IDebugDataSpaces::ReadVirtual failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    if (actual != size) {
+        DvsSetDbgEngLastErrorText("partial memory read");
+        *bytes_read = actual;
+        return DVS_DBGENG_ERROR;
+    }
+
+    *bytes_read = actual;
+    DvsSetDbgEngLastErrorText("ok");
+    return DVS_DBGENG_OK;
+}

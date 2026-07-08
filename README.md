@@ -5,14 +5,15 @@ and WinDbg Preview for Windows x64 targets. It will synchronize the debugger's
 runtime PC with IDA and display confidence-tagged runtime values for supported
 Hex-Rays variables.
 
-Current status: WinDbg connection, DbgEng-derived PC sync, and register
-responses. The Python broker can route JSONL/TCP messages, and the WinDbg
-extension can connect to the broker, send `hello`, report status, disconnect,
-send a `pc_update` using the current instruction pointer/module/base from
-DbgEng, briefly pump for `reg_request`, and send `reg_response`.
+Current status: WinDbg connection, DbgEng-derived PC sync, register responses,
+and memory responses. The Python broker can route JSONL/TCP messages, and the
+WinDbg extension can connect to the broker, send `hello`, report status,
+disconnect, send a `pc_update` using the current instruction
+pointer/module/base from DbgEng, briefly pump for `reg_request` and
+`mem_request`, then send `reg_response` and `mem_response`.
 
-Real IDA APIs, Hex-Rays APIs, stepping, memory responses, and variable recovery
-are not implemented yet.
+Real IDA APIs, Hex-Rays APIs, stepping, and variable recovery are not
+implemented yet.
 
 ## Architecture
 
@@ -44,13 +45,13 @@ ForCodex/    Original planning pack, retained unchanged
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
+python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
 ```
 
 Terminal 3:
@@ -101,11 +102,10 @@ python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
 WinDbg:
 
 ```text
-.load path\to\windbg_ext\build\dayvar.dll
+.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
-!dvs_status
 !dvs_pc
-!dvs_poll
+!dvs_pc
 !dvs_disconnect
 ```
 
@@ -114,10 +114,22 @@ with `auto_live=true` and `reason=dvs_pc`. If DbgEng cannot provide those
 values, the command reports an error instead of sending guessed data.
 
 After sending `pc_update`, `!dvs_pc` runs a bounded pump that can answer
-`reg_request` with `reg_response`. Supported registers are:
+`reg_request` with `reg_response` and `mem_request` with `mem_response`.
+Supported registers are:
 
 ```text
 rax rbx rcx rdx rsi rdi rsp rbp r8 r9 r10 r11 r12 r13 r14 r15 rip
+```
+
+Expected broker flow for each `!dvs_pc`:
+
+```text
+pc_update
+ida_pc_mapped
+reg_request
+reg_response
+mem_request
+mem_response
 ```
 
 ## MVP Goal

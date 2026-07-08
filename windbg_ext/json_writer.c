@@ -70,6 +70,73 @@ static int DvsAppendJson(char *buffer, unsigned long buffer_size, unsigned long 
     return DVS_JSON_OK;
 }
 
+static int DvsAppendJsonEscapedString(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long *offset,
+    const char *value)
+{
+    const unsigned char *p = (const unsigned char *)value;
+
+    if (DvsAppendJson(buffer, buffer_size, offset, "\"") != DVS_JSON_OK) {
+        return DVS_JSON_ERROR;
+    }
+
+    while (*p != '\0') {
+        switch (*p) {
+        case '"':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\\"") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\\':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\\\") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\b':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\b") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\f':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\f") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\n':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\n") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\r':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\r") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        case '\t':
+            if (DvsAppendJson(buffer, buffer_size, offset, "\\t") != DVS_JSON_OK) {
+                return DVS_JSON_ERROR;
+            }
+            break;
+        default:
+            if (*p < 0x20) {
+                if (DvsAppendJson(buffer, buffer_size, offset, "\\u%04x", (unsigned int)*p) != DVS_JSON_OK) {
+                    return DVS_JSON_ERROR;
+                }
+            } else {
+                if (DvsAppendJson(buffer, buffer_size, offset, "%c", *p) != DVS_JSON_OK) {
+                    return DVS_JSON_ERROR;
+                }
+            }
+            break;
+        }
+        p++;
+    }
+
+    return DvsAppendJson(buffer, buffer_size, offset, "\"");
+}
+
 int DvsWriteRegResponse(
     char *buffer,
     unsigned long buffer_size,
@@ -89,12 +156,13 @@ int DvsWriteRegResponse(
             buffer_size,
             &offset,
             "{\"protocol\":1,\"id\":%lu,\"type\":\"reg_response\",\"role\":\"windbg\","
-            "\"payload\":{\"pc_seq\":%lu,\"request_id\":\"%s\",\"runtime_pc\":\"%s\","
-            "\"ok\":true,\"registers\":{",
+            "\"payload\":{\"pc_seq\":%lu,\"request_id\":",
             message_id,
-            pc_seq,
-            request_id,
-            runtime_pc) != DVS_JSON_OK) {
+            pc_seq) != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, request_id) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"runtime_pc\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, runtime_pc) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"ok\":true,\"registers\":{") != DVS_JSON_OK) {
         return DVS_JSON_ERROR;
     }
 
@@ -116,6 +184,92 @@ int DvsWriteRegResponse(
     }
 
     if (DvsAppendJson(buffer, buffer_size, &offset, "}}}\n") != DVS_JSON_OK) {
+        return DVS_JSON_ERROR;
+    }
+
+    return DVS_JSON_OK;
+}
+
+int DvsWriteMemResponse(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long message_id,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const char *address,
+    unsigned long size,
+    const unsigned char *bytes,
+    unsigned long bytes_len)
+{
+    static const char hex_digits[] = "0123456789abcdef";
+    unsigned long offset = 0;
+    unsigned long i;
+
+    if (DvsAppendJson(
+            buffer,
+            buffer_size,
+            &offset,
+            "{\"protocol\":1,\"id\":%lu,\"type\":\"mem_response\",\"role\":\"windbg\","
+            "\"payload\":{\"pc_seq\":%lu,\"request_id\":",
+            message_id,
+            pc_seq) != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, request_id) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"runtime_pc\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, runtime_pc) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"ok\":true,\"address\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, address) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"size\":%lu,\"bytes_hex\":\"", size) != DVS_JSON_OK) {
+        return DVS_JSON_ERROR;
+    }
+
+    for (i = 0; i < bytes_len; i++) {
+        if (DvsAppendJson(
+                buffer,
+                buffer_size,
+                &offset,
+                "%c%c",
+                hex_digits[(bytes[i] >> 4) & 0x0f],
+                hex_digits[bytes[i] & 0x0f]) != DVS_JSON_OK) {
+            return DVS_JSON_ERROR;
+        }
+    }
+
+    return DvsAppendJson(buffer, buffer_size, &offset, "\"}}\n");
+}
+
+int DvsWriteMemErrorResponse(
+    char *buffer,
+    unsigned long buffer_size,
+    unsigned long message_id,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const char *address,
+    unsigned long size,
+    const char *code,
+    const char *message)
+{
+    unsigned long offset = 0;
+
+    if (DvsAppendJson(
+            buffer,
+            buffer_size,
+            &offset,
+            "{\"protocol\":1,\"id\":%lu,\"type\":\"mem_response\",\"role\":\"windbg\","
+            "\"payload\":{\"pc_seq\":%lu,\"request_id\":",
+            message_id,
+            pc_seq) != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, request_id) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"runtime_pc\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, runtime_pc) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"ok\":false,\"address\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, address) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"size\":%lu,\"error\":{\"code\":", size) != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, code) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, ",\"message\":") != DVS_JSON_OK ||
+        DvsAppendJsonEscapedString(buffer, buffer_size, &offset, message) != DVS_JSON_OK ||
+        DvsAppendJson(buffer, buffer_size, &offset, "}}}\n") != DVS_JSON_OK) {
         return DVS_JSON_ERROR;
     }
 

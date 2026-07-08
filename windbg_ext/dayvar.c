@@ -20,6 +20,7 @@
 #include "socket_client.h"
 
 #define DVS_JSON_BUFFER_SIZE 1024
+#define DVS_MEM_JSON_BUFFER_SIZE 12288
 #define DVS_LINE_BUFFER_SIZE 4096
 #define DVS_DEFAULT_PUMP_MESSAGES 16
 #define DVS_POLL_TIMEOUT_MS 250
@@ -202,6 +203,16 @@ static int DvsExtractJsonUnsignedField(const char *json, const char *field, unsi
     return sscanf(start, "%lu", out) == 1;
 }
 
+static int DvsExtractJsonU64StringField(const char *json, const char *field, unsigned long long *out)
+{
+    char text[64];
+
+    if (!DvsExtractJsonStringField(json, field, text, sizeof(text))) {
+        return 0;
+    }
+    return sscanf(text, "%llx", out) == 1;
+}
+
 static void DvsLowerAscii(char *text)
 {
     while (*text != '\0') {
@@ -310,6 +321,121 @@ static int DvsHandleRegRequest(PDEBUG_CLIENT client, const char *line)
     return 1;
 }
 
+static int DvsSendMemErrorResponse(
+    PDEBUG_CLIENT client,
+    unsigned long pc_seq,
+    const char *request_id,
+    const char *runtime_pc,
+    const char *address_text,
+    unsigned long size,
+    const char *code,
+    const char *message)
+{
+    char json[DVS_JSON_BUFFER_SIZE * 2];
+
+    if (DvsWriteMemErrorResponse(
+            json,
+            sizeof(json),
+            DvsNextMessageId(),
+            pc_seq,
+            request_id,
+            runtime_pc,
+            address_text,
+            size,
+            code,
+            message) != DVS_JSON_OK) {
+        DvsOutput(client, "dayvar: failed to build mem_response error JSON\n");
+        return 0;
+    }
+
+    return DvsSendJson(client, json);
+}
+
+static int DvsHandleMemRequest(PDEBUG_CLIENT client, const char *line)
+{
+    unsigned long pc_seq = 0;
+    unsigned long size = 0;
+    unsigned long bytes_read = 0;
+    unsigned long long address = 0;
+    char request_id[128];
+    char runtime_pc[64];
+    char address_text[64];
+    unsigned char bytes[DVS_MAX_MEMORY_READ_SIZE];
+    char json[DVS_MEM_JSON_BUFFER_SIZE];
+
+    memset(bytes, 0, sizeof(bytes));
+
+    if (!DvsExtractJsonUnsignedField(line, "pc_seq", &pc_seq) ||
+        !DvsExtractJsonStringField(line, "request_id", request_id, sizeof(request_id)) ||
+        !DvsExtractJsonStringField(line, "runtime_pc", runtime_pc, sizeof(runtime_pc)) ||
+        !DvsExtractJsonStringField(line, "address", address_text, sizeof(address_text)) ||
+        !DvsExtractJsonUnsignedField(line, "size", &size)) {
+        DvsOutput(client, "dayvar: invalid mem_request ignored\n");
+        return 0;
+    }
+
+    if (!DvsExtractJsonU64StringField(line, "address", &address)) {
+        DvsOutput(client, "dayvar: mem_request has invalid address: %s\n", address_text);
+        return DvsSendMemErrorResponse(
+            client,
+            pc_seq,
+            request_id,
+            runtime_pc,
+            address_text,
+            size,
+            "invalid_address",
+            "invalid memory read address");
+    }
+
+    if (size == 0 || size > DVS_MAX_MEMORY_READ_SIZE) {
+        DvsOutput(client, "dayvar: mem_request has invalid size: %lu\n", size);
+        return DvsSendMemErrorResponse(
+            client,
+            pc_seq,
+            request_id,
+            runtime_pc,
+            address_text,
+            size,
+            "invalid_size",
+            "invalid memory read size");
+    }
+
+    if (DvsReadVirtualMemory(client, address, size, bytes, &bytes_read) != DVS_DBGENG_OK) {
+        DvsOutput(client, "dayvar: memory read failed: %s\n", DvsDbgEngLastError());
+        return DvsSendMemErrorResponse(
+            client,
+            pc_seq,
+            request_id,
+            runtime_pc,
+            address_text,
+            size,
+            "read_failed",
+            DvsDbgEngLastError());
+    }
+
+    if (DvsWriteMemResponse(
+            json,
+            sizeof(json),
+            DvsNextMessageId(),
+            pc_seq,
+            request_id,
+            runtime_pc,
+            address_text,
+            size,
+            bytes,
+            bytes_read) != DVS_JSON_OK) {
+        DvsOutput(client, "dayvar: failed to build mem_response JSON\n");
+        return 0;
+    }
+
+    if (!DvsSendJson(client, json)) {
+        return 0;
+    }
+
+    DvsOutput(client, "dayvar: sent mem_response pc_seq=%lu request_id=%s address=%s size=%lu\n", pc_seq, request_id, address_text, size);
+    return 1;
+}
+
 static void DvsHandleIncomingMessage(PDEBUG_CLIENT client, const char *line)
 {
     char type[64];
@@ -322,7 +448,7 @@ static void DvsHandleIncomingMessage(PDEBUG_CLIENT client, const char *line)
     if (strcmp(type, "reg_request") == 0) {
         DvsHandleRegRequest(client, line);
     } else if (strcmp(type, "mem_request") == 0) {
-        DvsOutput(client, "dayvar: mem_request ignored; not implemented yet\n");
+        DvsHandleMemRequest(client, line);
     } else {
         DvsOutput(client, "dayvar: ignored incoming message type=%s\n", type);
     }
