@@ -177,8 +177,81 @@ recv type=mem_response
 Current limitations:
 
 - No `!dvs_step`.
-- No IDA API integration.
+- No real IDA plugin in this fake-client test.
 - No real variable recovery.
+
+## Real IDA Plugin Auto-Live Test
+
+This flow replaces `samples/fake_ida_client.py` with the IDA plugin while
+keeping the existing broker and WinDbg extension.
+
+Terminal 1 in WSL:
+
+```bash
+python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+```
+
+In IDA on the Windows host:
+
+```text
+Run/load ida_plugin/dayvar_plugin.py
+Edit -> DayVarSync -> Connect
+```
+
+The connect action prompts for a broker endpoint. Use:
+
+```text
+172.28.70.90:9100
+```
+
+In WinDbg:
+
+```text
+.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
+!dvs_connect 172.28.70.90 9100
+!dvs_pc
+!dvs_pc
+```
+
+Expected broker flow for each `!dvs_pc`:
+
+```text
+[broker] route pc_update id=<n> windbg -> ida
+[broker] route ida_pc_mapped id=<n> ida -> windbg
+[broker] route reg_request id=<n> ida -> windbg
+[broker] route reg_response id=<n> windbg -> ida
+[broker] route mem_request id=<n> ida -> windbg
+[broker] route mem_response id=<n> windbg -> ida
+```
+
+Expected IDA output log:
+
+```text
+[DayVarSync] hello_ack ...
+[DayVarSync] pc_seq=<n> runtime_pc=<pc> ida_ea=<ea> module=<module>
+[DayVarSync] reg_response pc_seq=<n> request_id=reg-<n>-1 ok=True ...
+[DayVarSync] mem_response pc_seq=<n> request_id=mem-<n>-rsp ok=True ...
+```
+
+The plugin computes:
+
+```text
+ida_ea = idaapi.get_imagebase() + (runtime_pc - runtime_module_base)
+```
+
+and jumps IDA to that address. If a response has an old `pc_seq`, mismatched
+`runtime_pc`, or unknown `request_id`, it is logged and ignored.
+
+Current real IDA plugin limitations:
+
+- Fixed register request only: `rcx`, `rdx`, `r8`, `r9`, `rsp`.
+- One test memory read only: 8 bytes at `rsp`.
+- No Hex-Rays variable extraction.
+- No `v*` recovery.
+- No argument mapping.
+- No stack argument logic.
+- No stepping.
+- No pseudocode overlays.
 
 ## Future WinDbg Smoke Tests
 

@@ -5,15 +5,14 @@ and WinDbg Preview for Windows x64 targets. It will synchronize the debugger's
 runtime PC with IDA and display confidence-tagged runtime values for supported
 Hex-Rays variables.
 
-Current status: WinDbg connection, DbgEng-derived PC sync, register responses,
-and memory responses. The Python broker can route JSONL/TCP messages, and the
-WinDbg extension can connect to the broker, send `hello`, report status,
-disconnect, send a `pc_update` using the current instruction
-pointer/module/base from DbgEng, briefly pump for `reg_request` and
-`mem_request`, then send `reg_response` and `mem_response`.
+Current status: broker routing, WinDbg DbgEng-derived PC/register/memory
+responses, and a real IDA-side plugin for the current auto-live flow. The IDA
+plugin can connect to the broker, receive `pc_update`, map the runtime PC to an
+IDA EA, jump there, request `rcx`, `rdx`, `r8`, `r9`, and `rsp`, then request
+one 8-byte memory read at `rsp`.
 
-Real IDA APIs, Hex-Rays APIs, stepping, and variable recovery are not
-implemented yet.
+Hex-Rays APIs, stepping, argument mapping, stack argument logic, pseudocode
+overlays, and variable recovery are not implemented yet.
 
 ## Architecture
 
@@ -32,7 +31,7 @@ IDA Plugin <-> Python Broker <-> WinDbg Extension DLL
 
 ```text
 broker/      Python broker and protocol helpers
-ida_plugin/  IDAPython plugin skeleton
+ida_plugin/  IDAPython plugin for current PC/reg/mem auto-live flow
 windbg_ext/  C-first WinDbg extension skeleton
 samples/     Fake broker test clients and future validation samples
 docs/        Adapted architecture and implementation docs
@@ -131,6 +130,57 @@ reg_response
 mem_request
 mem_response
 ```
+
+## Real IDA Plugin Manual Test
+
+Start the broker in WSL:
+
+```bash
+python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+```
+
+In IDA on the Windows host:
+
+```text
+Run/load ida_plugin/dayvar_plugin.py
+Edit -> DayVarSync -> Connect
+```
+
+Use this broker endpoint when prompted:
+
+```text
+172.28.70.90:9100
+```
+
+In WinDbg:
+
+```text
+.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
+!dvs_connect 172.28.70.90 9100
+!dvs_pc
+!dvs_pc
+```
+
+For each `!dvs_pc`, the expected broker flow is:
+
+```text
+pc_update
+ida_pc_mapped
+reg_request
+reg_response
+mem_request
+mem_response
+```
+
+The IDA plugin maps the PC with:
+
+```text
+ida_ea = idaapi.get_imagebase() + (runtime_pc - runtime_module_base)
+```
+
+Then it jumps to the mapped EA and logs the mapping, register response, and
+memory response in the IDA output window. Stale responses from an older
+`pc_seq` are ignored.
 
 ## MVP Goal
 
