@@ -1,0 +1,8 @@
+LIBRARY dayvar
+EXPORTS
+    DebugExtensionInitialize
+    DebugExtensionUninitialize
+    dvs_connect
+    dvs_disconnect
+    dvs_status
+    dvs_pc

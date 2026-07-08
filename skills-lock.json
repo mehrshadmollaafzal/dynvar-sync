@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "idapython": {
+      "source": "mrexodia/ida-pro-mcp",
+      "sourceType": "github",
+      "skillPath": "skills/idapython/SKILL.md",
+      "computedHash": "ed005d06c68854e26baa538c8741db06ad2eef440f529071fe7d334d37d19086"
+    }
+  }
+}
