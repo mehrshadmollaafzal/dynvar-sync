@@ -1,7 +1,7 @@
 # WinDbg Extension
 
-Phase 2 implements the first C-first WinDbg extension commands for broker
-connection and basic PC synchronization.
+The WinDbg extension implements the first C-first commands for broker
+connection and PC synchronization.
 
 Implemented commands:
 
@@ -18,12 +18,12 @@ Behavior:
   `hello` message with `role = windbg`.
 - `!dvs_disconnect` closes the socket.
 - `!dvs_status` prints the current connection state.
-- `!dvs_pc` sends a `pc_update` message with a monotonically increasing
-  `pc_seq`.
+- `!dvs_pc` reads the current instruction pointer, containing module name, and
+  runtime module base through DbgEng, then sends a `pc_update` message with a
+  monotonically increasing `pc_seq` and `auto_live=true`.
 
-Current Phase 2 limitation: real DbgEng PC/module/base extraction is not
-implemented yet. `dbgeng_ops.c` returns clearly marked placeholder values and
-sets the `pc_update` reason to `dvs_pc_phase2_placeholder`.
+DbgEng-specific lookup is isolated in `dbgeng_ops.c`. If PC/module/base lookup
+fails, `!dvs_pc` reports the DbgEng error and does not send guessed data.
 
 ## Build Notes
 
@@ -97,7 +97,17 @@ windbg extension -> broker -> fake_ida: pc_update
 ```
 
 The fake IDA client may reply with `ida_pc_mapped` and `reg_request`, but Phase
-2 does not implement a receive pump or register responses yet.
+2 does not implement a receive pump or register responses yet. The broker log
+or fake IDA output should show `pc_update` fields derived from the current
+debugger context:
+
+```text
+payload.pc
+payload.module
+payload.runtime_module_base
+payload.auto_live = true
+payload.reason = dvs_pc
+```
 
 The extension must stay low-level. It must not parse Hex-Rays variables, infer
 decompiler semantics, block WinDbg forever, or guess values for unsupported

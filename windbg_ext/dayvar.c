@@ -1,9 +1,8 @@
 /*
  * DayVar Sync WinDbg extension, Phase 2.
  *
- * This phase implements connect/disconnect/status/pc_update only. Real DbgEng
- * PC/module extraction is isolated in dbgeng_ops.c and still returns explicit
- * placeholder values.
+ * This phase implements connect/disconnect/status/pc_update only. DbgEng
+ * PC/module extraction is isolated in dbgeng_ops.c.
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -208,7 +207,10 @@ HRESULT CALLBACK dvs_pc(PDEBUG_CLIENT Client, PCSTR args)
         return E_FAIL;
     }
 
-    DvsReadCurrentPcInfo(&pc_info);
+    if (DvsReadCurrentPcInfo(Client, &pc_info) != DVS_DBGENG_OK) {
+        DvsOutput(Client, "dayvar: failed to read PC/module info: %s\n", DvsDbgEngLastError());
+        return E_FAIL;
+    }
 
     message_id = DvsNextMessageId();
     pc_seq = DvsNextPcSeq();
@@ -221,7 +223,7 @@ HRESULT CALLBACK dvs_pc(PDEBUG_CLIENT Client, PCSTR args)
             pc_info.pc,
             pc_info.module,
             pc_info.runtime_module_base,
-            pc_info.is_placeholder ? "dvs_pc_phase2_placeholder" : "dvs_pc",
+            "dvs_pc",
             1) != DVS_JSON_OK) {
         DvsOutput(Client, "dayvar: failed to build pc_update JSON\n");
         return E_FAIL;
@@ -233,12 +235,11 @@ HRESULT CALLBACK dvs_pc(PDEBUG_CLIENT Client, PCSTR args)
 
     DvsOutput(
         Client,
-        "dayvar: sent pc_update pc_seq=%lu pc=0x%016llx module=%s base=0x%016llx%s\n",
+        "dayvar: sent pc_update pc_seq=%lu pc=0x%016llx module=%s base=0x%016llx\n",
         pc_seq,
         pc_info.pc,
         pc_info.module,
-        pc_info.runtime_module_base,
-        pc_info.is_placeholder ? " placeholder=true" : "");
+        pc_info.runtime_module_base);
 
     return S_OK;
 }

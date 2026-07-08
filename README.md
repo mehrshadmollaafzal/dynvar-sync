@@ -5,13 +5,14 @@ and WinDbg Preview for Windows x64 targets. It will synchronize the debugger's
 runtime PC with IDA and display confidence-tagged runtime values for supported
 Hex-Rays variables.
 
-Current status: Phase 2 WinDbg connection + PC sync. The Python broker can
-route JSONL/TCP messages, and the WinDbg extension can connect to the broker,
-send `hello`, report status, disconnect, and send a basic `pc_update`.
+Current status: WinDbg connection + DbgEng-derived PC sync. The Python broker
+can route JSONL/TCP messages, and the WinDbg extension can connect to the
+broker, send `hello`, report status, disconnect, and send a `pc_update` using
+the current instruction pointer, module name, and runtime module base from
+DbgEng.
 
-Real IDA APIs, Hex-Rays APIs, DbgEng PC/module extraction, stepping, polling,
-register responses, memory responses, and variable recovery are not implemented
-yet.
+Real IDA APIs, Hex-Rays APIs, stepping, polling, register responses, memory
+responses, and variable recovery are not implemented yet.
 
 ## Architecture
 
@@ -107,8 +108,9 @@ WinDbg:
 !dvs_disconnect
 ```
 
-`!dvs_pc` currently sends explicitly marked placeholder PC/module/base values.
-Real DbgEng extraction is isolated for a later phase.
+`!dvs_pc` sends DbgEng-derived `pc`, `module`, and `runtime_module_base` fields
+with `auto_live=true` and `reason=dvs_pc`. If DbgEng cannot provide those
+values, the command reports an error instead of sending guessed data.
 
 ## MVP Goal
 

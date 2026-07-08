@@ -59,7 +59,7 @@ Known Phase 1 limitations:
 - No DbgEng register or memory reads.
 - No broker-side stale-response rejection beyond preserving fields and routing.
 
-## Phase 2 WinDbg Extension PC Test
+## WinDbg Extension PC Test
 
 Build `windbg_ext/dayvar.dll` on Windows with the Windows SDK / Visual Studio
 developer environment. The extension depends on `dbgeng.h`, WinSock2, and
@@ -130,9 +130,19 @@ Expected broker logs include a registered `windbg` client and a routed
 [broker] route pc_update id=<n> windbg -> ida
 ```
 
-Current Phase 2 limitations:
+The fake IDA client should print a `pc_update` payload containing real
+DbgEng-derived values from the current debugger context:
 
-- `!dvs_pc` uses placeholder PC/module/base values from `dbgeng_ops.c`.
+```text
+pc
+module
+runtime_module_base
+auto_live = true
+reason = dvs_pc
+```
+
+Current limitations:
+
 - No `!dvs_poll`.
 - No `!dvs_step`.
 - No `reg_response`.
