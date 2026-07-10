@@ -12,10 +12,13 @@ IDA EA, jump there, enumerate Hex-Rays lvars, show them in a Live Variables
 table, and read supported Windows x64 arguments at exact function entry. The
 IDA argument detector uses Hex-Rays argument indexes, `is_arg_var()` when it is
 reliable, prototype names, and known Windows x64 entry locations such as
-`rcx`, `rdx`/`edx`, `r8`, `r9`, and `^B0` stack notation.
+`rcx`, `rdx`/`edx`, `r8`, `r9`, and `^B0` stack notation. The WinDbg extension
+also supports asynchronous `!dvs_step p|t [count]`: it initiates the step,
+returns immediately, then sends a fresh `pc_update` and pumps immediate IDA
+requests when WinDbg reports the session is accessible again.
 
-Real `v*` recovery, microcode analysis, stepping, complex register lifetime
-tracking, and pseudocode overlays are not implemented yet.
+Real `v*` recovery, microcode analysis, complex register lifetime tracking,
+and pseudocode overlays are not implemented yet.
 
 ## Architecture
 
@@ -162,7 +165,7 @@ In WinDbg:
 .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
 !dvs_pc
-!dvs_pc
+!dvs_step p 1
 ```
 
 For each `!dvs_pc`, the expected broker flow is:
@@ -196,6 +199,17 @@ arg4+ -> [rsp + 0x28 + 8 * (arg_index - 4)]
 Unsupported `v*` variables are still listed, but they remain
 `unavailable/unsupported_variable`. Stale responses from an older `pc_seq` are
 ignored.
+
+After `!dvs_step p 1` or `!dvs_step t 1`, WinDbg sends
+`pc_update(auto_live=true, reason=dvs_step)` from the asynchronous session
+accessible notification, after the target has stopped at the post-step PC. If
+IDA maps the new PC inside the same function but not at entry, prior entry
+argument values remain visible only as `stale/stale_entry_value`, and no
+exact-entry arg request is sent.
+
+Values are displayed as normalized hex. Register values are canonical `0x...`;
+stack argument memory reads decode 1/2/4/8-byte values as little-endian numeric
+hex and keep raw bytes in the row reason.
 
 ## MVP Goal
 

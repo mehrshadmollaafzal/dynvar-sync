@@ -284,3 +284,85 @@ int DvsReadVirtualMemory(
     DvsSetDbgEngLastErrorText("ok");
     return DVS_DBGENG_OK;
 }
+
+int DvsStepExecution(PDEBUG_CLIENT client, char mode, unsigned long count)
+{
+    HRESULT hr;
+    PDEBUG_CONTROL control = NULL;
+    unsigned long i;
+    ULONG step_status;
+
+    if (client == NULL) {
+        DvsSetDbgEngLastErrorText("client is null");
+        return DVS_DBGENG_ERROR;
+    }
+    if ((mode != 'p' && mode != 't') || count == 0) {
+        DvsSetDbgEngLastErrorText("invalid step mode or count");
+        return DVS_DBGENG_ERROR;
+    }
+    step_status = (mode == 'p') ? DEBUG_STATUS_STEP_OVER : DEBUG_STATUS_STEP_INTO;
+
+    hr = client->lpVtbl->QueryInterface(
+        client,
+        &IID_IDebugControl,
+        (void **)&control);
+    if (FAILED(hr) || control == NULL) {
+        DvsSetDbgEngLastError("QueryInterface(IDebugControl) failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    for (i = 0; i < count; i++) {
+        hr = control->lpVtbl->SetExecutionStatus(control, step_status);
+        if (FAILED(hr)) {
+            control->lpVtbl->Release(control);
+            DvsSetDbgEngLastError("IDebugControl::SetExecutionStatus step failed", hr);
+            return DVS_DBGENG_ERROR;
+        }
+    }
+
+    control->lpVtbl->Release(control);
+    DvsSetDbgEngLastErrorText("ok");
+    return DVS_DBGENG_OK;
+}
+
+int DvsIsExecutionStopped(PDEBUG_CLIENT client, unsigned long *status_out)
+{
+    HRESULT hr;
+    PDEBUG_CONTROL control = NULL;
+    ULONG status = 0;
+
+    if (status_out != NULL) {
+        *status_out = 0;
+    }
+    if (client == NULL) {
+        DvsSetDbgEngLastErrorText("client is null");
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = client->lpVtbl->QueryInterface(
+        client,
+        &IID_IDebugControl,
+        (void **)&control);
+    if (FAILED(hr) || control == NULL) {
+        DvsSetDbgEngLastError("QueryInterface(IDebugControl) failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = control->lpVtbl->GetExecutionStatus(control, &status);
+    control->lpVtbl->Release(control);
+    if (FAILED(hr)) {
+        DvsSetDbgEngLastError("IDebugControl::GetExecutionStatus failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    if (status_out != NULL) {
+        *status_out = status;
+    }
+    if (status != DEBUG_STATUS_BREAK) {
+        DvsSetDbgEngLastErrorText("debuggee is not stopped at break status");
+        return DVS_DBGENG_ERROR;
+    }
+
+    DvsSetDbgEngLastErrorText("ok");
+    return DVS_DBGENG_OK;
+}

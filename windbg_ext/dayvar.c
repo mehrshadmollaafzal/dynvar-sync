@@ -29,6 +29,11 @@ static unsigned long g_next_message_id = 1;
 static unsigned long g_next_pc_seq = 1;
 static char g_connected_host[256] = "";
 static unsigned short g_connected_port = 0;
+static int g_step_pending = 0;
+static int g_step_in_progress = 0;
+static char g_step_mode = '\0';
+static unsigned long g_step_remaining = 0;
+static PDEBUG_CLIENT g_step_client = NULL;
 
 static void DvsCopyString(char *dst, unsigned long dst_size, const char *src)
 {
@@ -90,6 +95,26 @@ static int DvsSendJson(PDEBUG_CLIENT client, const char *json)
     return 1;
 }
 
+static void DvsReleaseStepClient(void)
+{
+    if (g_step_client != NULL) {
+        g_step_client->lpVtbl->Release(g_step_client);
+        g_step_client = NULL;
+    }
+}
+
+static void DvsClearPendingStep(PDEBUG_CLIENT client, const char *reason)
+{
+    if (g_step_pending) {
+        DvsOutput(client != NULL ? client : g_step_client, "dayvar: clearing pending step: %s\n", reason);
+    }
+    g_step_pending = 0;
+    g_step_in_progress = 0;
+    g_step_mode = '\0';
+    g_step_remaining = 0;
+    DvsReleaseStepClient();
+}
+
 static int DvsParseConnectArgs(const char *args, char *host, unsigned long host_size, unsigned int *port)
 {
     char parsed_host[256];
@@ -132,6 +157,37 @@ static unsigned long DvsParseOptionalUnsigned(const char *args, unsigned long de
         return default_value;
     }
     return value;
+}
+
+static int DvsParseStepArgs(const char *args, char *mode, unsigned long *count)
+{
+    char parsed_mode = '\0';
+    unsigned long parsed_count = 1;
+    int parsed;
+
+    if (args == NULL) {
+        return 0;
+    }
+
+    while (*args != '\0' && isspace((unsigned char)*args)) {
+        args++;
+    }
+    parsed = sscanf(args, " %c %lu", &parsed_mode, &parsed_count);
+    if (parsed < 1) {
+        return 0;
+    }
+
+    parsed_mode = (char)tolower((unsigned char)parsed_mode);
+    if (parsed_mode != 'p' && parsed_mode != 't') {
+        return 0;
+    }
+    if (parsed_count == 0 || parsed_count > 1000) {
+        return 0;
+    }
+
+    *mode = parsed_mode;
+    *count = parsed_count;
+    return 1;
 }
 
 static int DvsExtractJsonStringField(const char *json, const char *field, char *out, unsigned long out_size)
@@ -477,6 +533,115 @@ static unsigned long DvsPumpBroker(PDEBUG_CLIENT client, unsigned long max_messa
     return handled;
 }
 
+static int DvsSendPcUpdateAndPump(PDEBUG_CLIENT Client, const char *reason)
+{
+    DVS_PC_INFO pc_info;
+    char json[DVS_JSON_BUFFER_SIZE];
+    unsigned long message_id;
+    unsigned long pc_seq;
+
+    if (!DvsSocketIsConnected()) {
+        DvsOutput(Client, "dayvar: not connected; run !dvs_connect <host> <port>\n");
+        return 0;
+    }
+
+    if (DvsReadCurrentPcInfo(Client, &pc_info) != DVS_DBGENG_OK) {
+        DvsOutput(Client, "dayvar: failed to read PC/module info: %s\n", DvsDbgEngLastError());
+        return 0;
+    }
+
+    if (strcmp(reason, "dvs_step") == 0) {
+        DvsOutput(Client, "dayvar: post-step pc=0x%016llx\n", pc_info.pc);
+    }
+
+    message_id = DvsNextMessageId();
+    pc_seq = DvsNextPcSeq();
+
+    if (DvsWritePcUpdate(
+            json,
+            sizeof(json),
+            message_id,
+            pc_seq,
+            pc_info.pc,
+            pc_info.module,
+            pc_info.runtime_module_base,
+            reason,
+            1) != DVS_JSON_OK) {
+        DvsOutput(Client, "dayvar: failed to build pc_update JSON\n");
+        return 0;
+    }
+
+    if (!DvsSendJson(Client, json)) {
+        return 0;
+    }
+
+    DvsOutput(
+        Client,
+        "dayvar: sent pc_update pc_seq=%lu pc=0x%016llx module=%s base=0x%016llx reason=%s\n",
+        pc_seq,
+        pc_info.pc,
+        pc_info.module,
+        pc_info.runtime_module_base,
+        reason);
+
+    DvsPumpBroker(Client, DVS_DEFAULT_PUMP_MESSAGES);
+    return 1;
+}
+
+static int DvsInitiateNextPendingStep(void)
+{
+    unsigned long remaining_before;
+
+    if (!g_step_pending || g_step_in_progress || g_step_remaining == 0 || g_step_client == NULL) {
+        return 0;
+    }
+
+    remaining_before = g_step_remaining;
+    DvsOutput(g_step_client, "dayvar: step initiated mode=%c remaining=%lu\n", g_step_mode, remaining_before);
+    if (DvsStepExecution(g_step_client, g_step_mode, 1) != DVS_DBGENG_OK) {
+        DvsOutput(g_step_client, "dayvar: step initiation failed: %s\n", DvsDbgEngLastError());
+        DvsClearPendingStep(g_step_client, "step initiation failed");
+        return 0;
+    }
+
+    g_step_remaining--;
+    g_step_in_progress = 1;
+    return 1;
+}
+
+static void DvsHandlePostStepAccessible(void)
+{
+    unsigned long status = 0;
+
+    if (!g_step_pending || !g_step_in_progress || g_step_client == NULL) {
+        return;
+    }
+
+    DvsOutput(g_step_client, "dayvar: post-step session accessible\n");
+    if (DvsIsExecutionStopped(g_step_client, &status) != DVS_DBGENG_OK) {
+        DvsOutput(
+            g_step_client,
+            "dayvar: post-step sync skipped: execution status=%lu error=%s\n",
+            status,
+            DvsDbgEngLastError());
+        return;
+    }
+
+    g_step_in_progress = 0;
+    if (!DvsSendPcUpdateAndPump(g_step_client, "dvs_step")) {
+        DvsClearPendingStep(g_step_client, "post-step pc_update failed");
+        return;
+    }
+
+    if (g_step_remaining > 0) {
+        DvsInitiateNextPendingStep();
+        return;
+    }
+
+    DvsOutput(g_step_client, "dayvar: step sequence complete\n");
+    DvsClearPendingStep(g_step_client, "sequence complete");
+}
+
 HRESULT CALLBACK DebugExtensionInitialize(PULONG Version, PULONG Flags)
 {
     if (Version != NULL) {
@@ -490,7 +655,29 @@ HRESULT CALLBACK DebugExtensionInitialize(PULONG Version, PULONG Flags)
 
 void CALLBACK DebugExtensionUninitialize(void)
 {
+    DvsClearPendingStep(NULL, "extension unload");
     DvsSocketDisconnect();
+}
+
+void CALLBACK DebugExtensionNotify(ULONG Notify, ULONG64 Argument)
+{
+    (void)Argument;
+
+    switch (Notify) {
+    case DEBUG_NOTIFY_SESSION_ACCESSIBLE:
+        DvsHandlePostStepAccessible();
+        break;
+    case DEBUG_NOTIFY_SESSION_INACCESSIBLE:
+        if (g_step_pending) {
+            DvsOutput(g_step_client, "dayvar: session inaccessible; waiting for step completion\n");
+        }
+        break;
+    case DEBUG_NOTIFY_SESSION_INACTIVE:
+        DvsClearPendingStep(g_step_client, "session inactive");
+        break;
+    default:
+        break;
+    }
 }
 
 HRESULT CALLBACK dvs_connect(PDEBUG_CLIENT Client, PCSTR args)
@@ -530,6 +717,8 @@ HRESULT CALLBACK dvs_disconnect(PDEBUG_CLIENT Client, PCSTR args)
 {
     (void)args;
 
+    DvsClearPendingStep(Client, "disconnect");
+
     if (!DvsSocketIsConnected()) {
         DvsOutput(Client, "dayvar: not connected\n");
         return S_OK;
@@ -549,12 +738,22 @@ HRESULT CALLBACK dvs_status(PDEBUG_CLIENT Client, PCSTR args)
     if (DvsSocketIsConnected()) {
         DvsOutput(
             Client,
-            "dayvar: connected to %s:%u next_pc_seq=%lu\n",
+            "dayvar: connected to %s:%u next_pc_seq=%lu pending_step=%s mode=%c remaining=%lu in_progress=%s\n",
             g_connected_host,
             (unsigned int)g_connected_port,
-            g_next_pc_seq);
+            g_next_pc_seq,
+            g_step_pending ? "yes" : "no",
+            g_step_mode != '\0' ? g_step_mode : '-',
+            g_step_remaining,
+            g_step_in_progress ? "yes" : "no");
     } else {
-        DvsOutput(Client, "dayvar: disconnected\n");
+        DvsOutput(
+            Client,
+            "dayvar: disconnected pending_step=%s mode=%c remaining=%lu in_progress=%s\n",
+            g_step_pending ? "yes" : "no",
+            g_step_mode != '\0' ? g_step_mode : '-',
+            g_step_remaining,
+            g_step_in_progress ? "yes" : "no");
     }
 
     return S_OK;
@@ -562,55 +761,9 @@ HRESULT CALLBACK dvs_status(PDEBUG_CLIENT Client, PCSTR args)
 
 HRESULT CALLBACK dvs_pc(PDEBUG_CLIENT Client, PCSTR args)
 {
-    DVS_PC_INFO pc_info;
-    char json[DVS_JSON_BUFFER_SIZE];
-    unsigned long message_id;
-    unsigned long pc_seq;
-
     (void)args;
 
-    if (!DvsSocketIsConnected()) {
-        DvsOutput(Client, "dayvar: not connected; run !dvs_connect <host> <port>\n");
-        return E_FAIL;
-    }
-
-    if (DvsReadCurrentPcInfo(Client, &pc_info) != DVS_DBGENG_OK) {
-        DvsOutput(Client, "dayvar: failed to read PC/module info: %s\n", DvsDbgEngLastError());
-        return E_FAIL;
-    }
-
-    message_id = DvsNextMessageId();
-    pc_seq = DvsNextPcSeq();
-
-    if (DvsWritePcUpdate(
-            json,
-            sizeof(json),
-            message_id,
-            pc_seq,
-            pc_info.pc,
-            pc_info.module,
-            pc_info.runtime_module_base,
-            "dvs_pc",
-            1) != DVS_JSON_OK) {
-        DvsOutput(Client, "dayvar: failed to build pc_update JSON\n");
-        return E_FAIL;
-    }
-
-    if (!DvsSendJson(Client, json)) {
-        return E_FAIL;
-    }
-
-    DvsOutput(
-        Client,
-        "dayvar: sent pc_update pc_seq=%lu pc=0x%016llx module=%s base=0x%016llx\n",
-        pc_seq,
-        pc_info.pc,
-        pc_info.module,
-        pc_info.runtime_module_base);
-
-    DvsPumpBroker(Client, DVS_DEFAULT_PUMP_MESSAGES);
-
-    return S_OK;
+    return DvsSendPcUpdateAndPump(Client, "dvs_pc") ? S_OK : E_FAIL;
 }
 
 __declspec(dllexport) HRESULT CALLBACK dvs_poll(PDEBUG_CLIENT Client, PCSTR args)
@@ -626,5 +779,47 @@ __declspec(dllexport) HRESULT CALLBACK dvs_poll(PDEBUG_CLIENT Client, PCSTR args
     max_messages = DvsParseOptionalUnsigned(args, DVS_DEFAULT_PUMP_MESSAGES);
     handled = DvsPumpBroker(Client, max_messages);
     DvsOutput(Client, "dayvar: poll handled %lu message(s)\n", handled);
+    return S_OK;
+}
+
+__declspec(dllexport) HRESULT CALLBACK dvs_step(PDEBUG_CLIENT Client, PCSTR args)
+{
+    char mode = '\0';
+    unsigned long count = 1;
+
+    if (!DvsParseStepArgs(args, &mode, &count)) {
+        DvsOutput(Client, "usage: !dvs_step <p|t> [count]\n");
+        return E_INVALIDARG;
+    }
+
+    if (!DvsSocketIsConnected()) {
+        DvsOutput(Client, "dayvar: not connected; run !dvs_connect <host> <port>\n");
+        return E_FAIL;
+    }
+
+    if (g_step_pending) {
+        DvsOutput(
+            Client,
+            "dayvar: step already pending mode=%c remaining=%lu in_progress=%s\n",
+            g_step_mode,
+            g_step_remaining,
+            g_step_in_progress ? "yes" : "no");
+        return E_FAIL;
+    }
+
+    if (Client->lpVtbl->CreateClient(Client, &g_step_client) != S_OK || g_step_client == NULL) {
+        DvsOutput(Client, "dayvar: failed to create step client\n");
+        return E_FAIL;
+    }
+
+    g_step_pending = 1;
+    g_step_in_progress = 0;
+    g_step_mode = mode;
+    g_step_remaining = count;
+
+    if (!DvsInitiateNextPendingStep()) {
+        return E_FAIL;
+    }
+
     return S_OK;
 }

@@ -78,6 +78,13 @@ only as `stale`; otherwise argument rows remain `unavailable`.
 Responses are accepted only when they match the current `pc_seq` and an
 outstanding `request_id`.
 
+Value display is normalized in the Live Variables table:
+
+- Register values are shown as canonical `0x...` hex.
+- Stack argument memory reads decode 1, 2, 4, or 8 bytes as little-endian
+  numeric hex.
+- Raw memory bytes are kept in the row reason for stack reads.
+
 ## Manual Test
 
 Start the broker in WSL:
@@ -100,7 +107,7 @@ In WinDbg:
 .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
 !dvs_pc
-!dvs_pc
+!dvs_step p 1
 ```
 
 Expected broker flow for each `!dvs_pc`:
@@ -118,8 +125,9 @@ Expected IDA behavior:
 
 - IDA jumps to the mapped EA.
 - `DayVarSync Live Variables` lists Hex-Rays variables.
-- Supported entry arguments show `fresh/exact_entry` or
-  `fresh/exact_memory_read`.
+- Supported entry arguments show `fresh/exact_entry`.
+- After stepping away from entry in the same function, preserved entry values
+  become `stale/stale_entry_value`.
 - Unsupported `v*` variables show `unavailable/unsupported_variable`.
 
 ## Limitations
@@ -133,5 +141,4 @@ Not implemented yet:
 - Real `v*` runtime recovery.
 - Microcode analysis.
 - Complex register lifetime tracking.
-- Stepping.
 - Pseudocode overlays.

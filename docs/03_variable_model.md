@@ -53,8 +53,13 @@ Stack arguments are read from:
 [rsp + 0x28 + 8 * (arg_index - 4)]
 ```
 
-The memory bytes are shown as the debugger returned them. Later phases may add
-typed formatting.
+For stack arguments, the plugin reads the variable size when it is safely one
+of 1, 2, 4, or 8 bytes. Other sizes currently fall back to an 8-byte slot read.
+Memory bytes are decoded as little-endian numeric hex for 1/2/4/8-byte reads,
+and the raw bytes are kept in the reason/log text.
+
+Register values are normalized as canonical `0x...` hex. If Hex-Rays reports a
+1/2/4/8-byte argument type, the display masks the register value to that width.
 
 ## Initial Unsupported Variables
 
@@ -114,6 +119,28 @@ requests.
 If Hex-Rays is unavailable or decompilation fails, PC sync still works:
 `ida_pc_mapped` is sent and IDA jumps to the mapped EA, but no variable rows are
 updated from guessed data.
+
+## Fresh and Stale Transitions
+
+When a `pc_update` maps exactly to the function start EA, supported arguments
+are requested and successful responses update rows to:
+
+```text
+status = fresh
+confidence = exact_entry
+```
+
+When a later `pc_update` maps inside the same function but not to the function
+entry, prior entry argument values are preserved only as:
+
+```text
+status = stale
+confidence = stale_entry_value
+```
+
+If there is no previous entry snapshot for that function, supported arguments
+remain `unavailable/unknown`. Unsupported locals and `v*` temporaries remain
+`unavailable/unsupported_variable` in all of these cases.
 
 ## Live Variables View
 

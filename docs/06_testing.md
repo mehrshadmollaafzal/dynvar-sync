@@ -118,12 +118,12 @@ WinDbg:
 .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
 !dvs_pc
-!dvs_pc
+!dvs_step p 1
 !dvs_disconnect
 ```
 
-Expected broker logs include a registered `windbg` client and a routed
-`pc_update`:
+Expected broker logs include a registered `windbg` client and routed refresh
+messages for both `!dvs_pc` and `!dvs_step`:
 
 ```text
 [broker] registered role=windbg
@@ -143,13 +143,13 @@ pc
 module
 runtime_module_base
 auto_live = true
-reason = dvs_pc
+reason = dvs_pc or dvs_step
 ```
 
 For the auto-refresh register path:
 
 ```text
-!dvs_pc
+!dvs_pc or !dvs_step
   -> sends pc_update
   -> briefly pumps broker messages
   -> handles reg_request
@@ -176,7 +176,7 @@ recv type=mem_response
 
 Current limitations:
 
-- No `!dvs_step`.
+- Fake IDA does not validate stale-state transitions.
 - No real IDA plugin in this fake-client test.
 - No real variable recovery.
 
@@ -211,10 +211,10 @@ In WinDbg:
 .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
 !dvs_pc
-!dvs_pc
+!dvs_step p 1
 ```
 
-Expected broker flow for each `!dvs_pc`:
+Expected broker flow for `!dvs_pc` and for each `!dvs_step` refresh:
 
 ```text
 [broker] route pc_update id=<n> windbg -> ida
@@ -259,18 +259,59 @@ Expected Live Variables behavior:
 - At exact function entry, args 4+ can become `fresh/exact_entry` after the
   stack slot memory read succeeds.
 - Away from function entry, preserved entry values are marked `stale`.
+- Register values are displayed as canonical `0x...` hex.
+- Stack argument memory bytes are decoded little-endian for 1/2/4/8-byte
+  values and keep raw bytes in the row reason.
 - Unsupported `v*` variables are listed as
   `unavailable/unsupported_variable`.
 
 Current real IDA plugin limitations:
 
 - Argument runtime values are exact only at function entry.
-- Stack arguments are read as raw 8-byte memory slots.
+- Stack arguments read 1/2/4/8 bytes when Hex-Rays reports a safe size;
+  other sizes fall back to an 8-byte slot read.
 - No real `v*` recovery.
 - No microcode analysis.
 - No complex register lifetime tracking.
-- No stepping.
 - No pseudocode overlays.
+
+## Step Stale-State Test
+
+Use a function with known Windows x64 arguments, for example:
+
+```text
+bp nt!NtCreateFile
+g
+!dvs_pc
+```
+
+Expected after `!dvs_pc` at entry:
+
+- IDA jumps to the function entry.
+- Supported arguments become `fresh/exact_entry`.
+- Broker shows `pc_update`, `ida_pc_mapped`, `reg_request`, `reg_response`,
+  and stack `mem_request`/`mem_response` when stack args exist.
+
+Then run:
+
+```text
+!dvs_step p 1
+```
+
+Expected after stepping:
+
+- `!dvs_step` initiates the step and returns without calling `WaitForEvent`.
+- WinDbg sends `pc_update(auto_live=true, reason=dvs_step)` only after
+  `DebugExtensionNotify(DEBUG_NOTIFY_SESSION_ACCESSIBLE)` reports that the
+  session is accessible again.
+- The `pc_update` PC must match the stopped post-step WinDbg PC, for example
+  `nt!NtCreateFile+0x7` after stepping from function entry.
+- IDA jumps to the new EA.
+- If the new EA is inside the same function but not entry, old argument values
+  remain visible as `stale/stale_entry_value`.
+- Broker should show only `pc_update` and `ida_pc_mapped` unless the new PC is
+  exactly the function entry again.
+- Unsupported `v*` variables remain `unavailable/unsupported_variable`.
 
 ## Future WinDbg Smoke Tests
 

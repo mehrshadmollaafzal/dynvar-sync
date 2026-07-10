@@ -11,6 +11,7 @@ Implemented commands:
 !dvs_status
 !dvs_pc
 !dvs_poll [max_messages]
+!dvs_step <p|t> [count]
 ```
 
 Behavior:
@@ -25,9 +26,18 @@ Behavior:
   bounded broker pump to handle immediate `reg_request` and `mem_request`
   messages.
 - `!dvs_poll [max_messages]` manually runs the same bounded broker pump.
+- `!dvs_step p 1` steps over one instruction. `!dvs_step t 1` traces into one
+  instruction. The command records pending step state, initiates the step, and
+  returns immediately. When WinDbg later reports the session is accessible
+  again, the extension sends `pc_update(auto_live=true, reason=dvs_step)` and
+  runs the same bounded broker pump as `!dvs_pc`.
 
 DbgEng-specific lookup is isolated in `dbgeng_ops.c`. If PC/module/base lookup
 fails, `!dvs_pc` reports the DbgEng error and does not send guessed data.
+Stepping initiation is isolated in `dbgeng_ops.c` and uses DbgEng execution
+control APIs. Post-step synchronization is asynchronous through
+`DebugExtensionNotify(DEBUG_NOTIFY_SESSION_ACCESSIBLE)`. The extension does not
+call `WaitForEvent` from command paths.
 
 Register requests are handled with DbgEng register APIs. Supported registers:
 
@@ -100,11 +110,11 @@ WinDbg:
 .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
 !dvs_connect 172.28.70.90 9100
 !dvs_pc
-!dvs_pc
+!dvs_step p 1
 !dvs_disconnect
 ```
 
-Expected broker flow for each `!dvs_pc`:
+Expected broker flow for `!dvs_pc` and for each `!dvs_step` refresh:
 
 ```text
 pc_update
@@ -123,17 +133,20 @@ payload.pc
 payload.module
 payload.runtime_module_base
 payload.auto_live = true
-payload.reason = dvs_pc
+payload.reason = dvs_pc or dvs_step
 ```
+
+For `!dvs_step`, the `pc_update` is sent only after the debugger stops at the
+post-step PC. While the target is running, `!dvs_status` reports the pending
+step mode/count.
 
 `reg_response` and `mem_response` preserve the request `pc_seq`, `request_id`,
 and `runtime_pc`.
 
 Current limitations:
 
-- No stepping yet.
-- No real IDA API integration yet.
 - No Hex-Rays `v*` variable recovery yet.
+- No decompiler semantics in the WinDbg extension.
 
 The extension must stay low-level. It must not parse Hex-Rays variables, infer
 decompiler semantics, block WinDbg forever, or guess values for unsupported

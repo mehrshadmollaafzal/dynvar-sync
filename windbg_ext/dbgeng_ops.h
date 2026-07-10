@@ -37,6 +37,8 @@ int DvsReadVirtualMemory(
     unsigned long size,
     unsigned char *bytes,
     unsigned long *bytes_read);
+int DvsStepExecution(PDEBUG_CLIENT client, char mode, unsigned long count);
+int DvsIsExecutionStopped(PDEBUG_CLIENT client, unsigned long *status_out);
 const char *DvsDbgEngLastError(void);
 
 #endif

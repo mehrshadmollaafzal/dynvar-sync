@@ -2,7 +2,10 @@ LIBRARY dayvar
 EXPORTS
     DebugExtensionInitialize
     DebugExtensionUninitialize
+    DebugExtensionNotify
     dvs_connect
     dvs_disconnect
     dvs_status
     dvs_pc
+    dvs_poll
+    dvs_step

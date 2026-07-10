@@ -293,7 +293,7 @@ class DayVarCore:
             register = ENTRY_REGISTERS[row.arg_index]
             value = registers.get(register)
             if isinstance(value, str) and value:
-                row.value = value
+                row.value = _format_hex_value(value, row.size)
                 row.status = STATUS_FRESH
                 row.confidence = CONFIDENCE_EXACT_ENTRY
                 row.location = register
@@ -319,10 +319,10 @@ class DayVarCore:
             row.last_pc = pending.runtime_pc
             if payload.get("ok") is True:
                 bytes_hex = payload.get("bytes_hex", "")
-                row.value = str(bytes_hex)
+                row.value = _format_memory_value(str(bytes_hex), pending.size)
                 row.status = STATUS_FRESH
                 row.confidence = CONFIDENCE_EXACT_ENTRY
-                row.reason = "stack argument memory read at exact function entry"
+                row.reason = f"stack argument memory read at exact function entry raw={bytes_hex}"
             else:
                 row.status = STATUS_ERROR
                 row.confidence = CONFIDENCE_READ_FAILED
@@ -352,7 +352,7 @@ class DayVarCore:
             address = rsp + stack_arg_offset(row.arg_index)
             address_text = f"0x{address:x}"
             request_id = f"mem-{pending.pc_seq}-{row.name}"
-            size = STACK_ARG_SLOT_SIZE
+            size = _runtime_read_size(row.size)
             self.pending_requests[request_id] = PendingRequest(
                 kind="mem",
                 pc_seq=pending.pc_seq,
@@ -439,3 +439,35 @@ def _error_reason(payload: dict[str, Any]) -> str:
     if isinstance(error, str) and error:
         return error
     return "runtime read failed"
+
+
+def _runtime_read_size(variable_size: int) -> int:
+    """Choose a conservative stack argument read size."""
+    if variable_size in (1, 2, 4, 8):
+        return variable_size
+    return STACK_ARG_SLOT_SIZE
+
+
+def _format_hex_value(value: str, variable_size: int = 0) -> str:
+    """Normalize a register/memory integer as canonical hex."""
+    try:
+        number = int(value, 0)
+    except (TypeError, ValueError):
+        return str(value)
+    if variable_size in (1, 2, 4, 8):
+        number &= (1 << (variable_size * 8)) - 1
+    return f"0x{number:x}"
+
+
+def _format_memory_value(bytes_hex: str, size: int) -> str:
+    """Decode little-endian memory bytes as a numeric value when possible."""
+    if size not in (1, 2, 4, 8):
+        return bytes_hex
+    try:
+        data = bytes.fromhex(bytes_hex)
+    except ValueError:
+        return bytes_hex
+    if len(data) < size:
+        return bytes_hex
+    number = int.from_bytes(data[:size], "little", signed=False)
+    return f"0x{number:x}"
