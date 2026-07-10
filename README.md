@@ -8,11 +8,14 @@ Hex-Rays variables.
 Current status: broker routing, WinDbg DbgEng-derived PC/register/memory
 responses, and a real IDA-side plugin for the current auto-live flow. The IDA
 plugin can connect to the broker, receive `pc_update`, map the runtime PC to an
-IDA EA, jump there, request `rcx`, `rdx`, `r8`, `r9`, and `rsp`, then request
-one 8-byte memory read at `rsp`.
+IDA EA, jump there, enumerate Hex-Rays lvars, show them in a Live Variables
+table, and read supported Windows x64 arguments at exact function entry. The
+IDA argument detector uses Hex-Rays argument indexes, `is_arg_var()` when it is
+reliable, prototype names, and known Windows x64 entry locations such as
+`rcx`, `rdx`/`edx`, `r8`, `r9`, and `^B0` stack notation.
 
-Hex-Rays APIs, stepping, argument mapping, stack argument logic, pseudocode
-overlays, and variable recovery are not implemented yet.
+Real `v*` recovery, microcode analysis, stepping, complex register lifetime
+tracking, and pseudocode overlays are not implemented yet.
 
 ## Architecture
 
@@ -31,7 +34,7 @@ IDA Plugin <-> Python Broker <-> WinDbg Extension DLL
 
 ```text
 broker/      Python broker and protocol helpers
-ida_plugin/  IDAPython plugin for current PC/reg/mem auto-live flow
+ida_plugin/  IDAPython plugin for Hex-Rays enumeration and entry arguments
 windbg_ext/  C-first WinDbg extension skeleton
 samples/     Fake broker test clients and future validation samples
 docs/        Adapted architecture and implementation docs
@@ -142,8 +145,9 @@ python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 In IDA on the Windows host:
 
 ```text
-Run/load ida_plugin/dayvar_plugin.py
-Edit -> DayVarSync -> Connect
+Load ida_plugin/dayvar_plugin.py
+DayVarSync -> Connect
+Open/decompile a function near the synced PC
 ```
 
 Use this broker endpoint when prompted:
@@ -178,9 +182,20 @@ The IDA plugin maps the PC with:
 ida_ea = idaapi.get_imagebase() + (runtime_pc - runtime_module_base)
 ```
 
-Then it jumps to the mapped EA and logs the mapping, register response, and
-memory response in the IDA output window. Stale responses from an older
-`pc_seq` are ignored.
+Then it jumps to the mapped EA, enumerates Hex-Rays variables, and refreshes
+the `DayVarSync Live Variables` table. Supported entry arguments are read with:
+
+```text
+arg0 -> rcx
+arg1 -> rdx
+arg2 -> r8
+arg3 -> r9
+arg4+ -> [rsp + 0x28 + 8 * (arg_index - 4)]
+```
+
+Unsupported `v*` variables are still listed, but they remain
+`unavailable/unsupported_variable`. Stale responses from an older `pc_seq` are
+ignored.
 
 ## MVP Goal
 
@@ -195,7 +210,7 @@ arg3 -> r9
 arg4+ -> [rsp + stack offset]
 ```
 
-Values must be tagged as fresh, stale, unavailable, or unsupported. Responses
+Values must be tagged as fresh, stale, unavailable, or error. Responses
 must be correlated with `pc_seq` so old debugger replies cannot update a newer
 IDA view as fresh.
 

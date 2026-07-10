@@ -8,9 +8,10 @@ Responsibilities:
 - Receive `pc_update` messages from WinDbg through the broker.
 - Map runtime PCs to IDA EAs.
 - Jump IDA to the mapped EA.
-- Build the current fixed auto-live request plan.
+- Enumerate Hex-Rays local variables and arguments.
+- Build an exact-entry Windows x64 argument request plan.
 - Request only low-level register and memory reads from WinDbg.
-- Display mapping and live responses in the IDA output log.
+- Display variables and runtime values in the Live Variables table.
 - Mark late or outdated values as stale or unavailable.
 
 ## Current Behavior
@@ -21,6 +22,7 @@ Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
 - `DayVarSync: Connect`
 - `DayVarSync: Disconnect`
 - `DayVarSync: Status`
+- `DayVarSync: Show Live Variables`
 
 `Connect` prompts for a broker `host:port` and defaults to:
 
@@ -38,15 +40,40 @@ For each `pc_update(auto_live=true)`, IDA maps:
 ida_ea = idaapi.get_imagebase() + (runtime_pc - runtime_module_base)
 ```
 
-Then it jumps to `ida_ea`, sends `ida_pc_mapped`, sends a `reg_request` for:
+Then it jumps to `ida_ea`, sends `ida_pc_mapped`, finds the current IDA
+function, and decompiles it with Hex-Rays. The plugin enumerates `cfunc.lvars`
+and records:
 
 ```text
-rcx rdx r8 r9 rsp
+name, type string, size, is_arg, arg_index, Hex-Rays location metadata,
+function start EA
 ```
 
-After a matching `reg_response`, the plugin sends one test `mem_request` using
-the returned `rsp` value and size `8`. Matching `reg_response` and
-`mem_response` messages are printed to the IDA output log.
+Both argument-looking `a*` variables and generated `v*` variables are listed.
+`v*` locals/temporaries are not guessed. They appear as:
+
+```text
+status = unavailable
+confidence = unsupported_variable
+```
+
+At exact function entry only, the plugin maps Windows x64 arguments:
+
+```text
+arg0 -> rcx
+arg1 -> rdx
+arg2 -> r8
+arg3 -> r9
+arg4+ -> [rsp + 0x28 + 8 * (arg_index - 4)]
+```
+
+The register request is built from the arguments that exist in the current
+Hex-Rays lvar list. `rsp` is requested only when stack arguments are present.
+After a matching `reg_response`, the plugin sends one `mem_request` for each
+needed stack argument.
+
+If the mapped PC is not the function start EA, old entry values are preserved
+only as `stale`; otherwise argument rows remain `unavailable`.
 
 Responses are accepted only when they match the current `pc_seq` and an
 outstanding `request_id`.
@@ -62,8 +89,9 @@ python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 In IDA:
 
 ```text
-Run/load ida_plugin/dayvar_plugin.py
-Edit -> DayVarSync -> Connect
+Load ida_plugin/dayvar_plugin.py
+DayVarSync -> Connect
+Open/decompile a function near the synced PC
 ```
 
 In WinDbg:
@@ -86,6 +114,14 @@ mem_request
 mem_response
 ```
 
+Expected IDA behavior:
+
+- IDA jumps to the mapped EA.
+- `DayVarSync Live Variables` lists Hex-Rays variables.
+- Supported entry arguments show `fresh/exact_entry` or
+  `fresh/exact_memory_read`.
+- Unsupported `v*` variables show `unavailable/unsupported_variable`.
+
 ## Limitations
 
 The IDA plugin must not guess unsupported Hex-Rays temporaries. Arbitrary
@@ -94,9 +130,8 @@ remain unavailable instead of being invented.
 
 Not implemented yet:
 
-- Hex-Rays variable extraction.
-- `v*` recovery.
-- Argument mapping.
-- Stack argument logic.
+- Real `v*` runtime recovery.
+- Microcode analysis.
+- Complex register lifetime tracking.
 - Stepping.
 - Pseudocode overlays.

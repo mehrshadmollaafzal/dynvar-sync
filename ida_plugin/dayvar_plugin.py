@@ -1,8 +1,8 @@
 """IDA plugin entry point for DayVar Sync.
 
-This milestone implements the real IDA-side broker connection and the current
-auto-live register/memory test flow. Hex-Rays extraction and pseudocode
-overlays are intentionally not implemented here.
+This module implements the IDA-side broker connection, Hex-Rays lvar
+enumeration, exact-entry argument reads, and the Live Variables table
+foundation. Pseudocode overlays are intentionally not implemented here.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover - outside IDA validation path.
 
 from address_mapping import format_hex, map_pc_update
 from dynvar_core import DayVarCore
+from hexrays_variables import enumerate_hexrays_variables
 from live_variables_view import LiveVariablesView
 from protocol_client import ProtocolClient
 
@@ -36,6 +37,7 @@ DEFAULT_PORT = 9100
 ACTION_CONNECT = "dayvarsync:connect"
 ACTION_DISCONNECT = "dayvarsync:disconnect"
 ACTION_STATUS = "dayvarsync:status"
+ACTION_SHOW_LIVE = "dayvarsync:show_live"
 
 
 def _ida_version() -> str:
@@ -95,6 +97,10 @@ class DayVarController:
                 f"runtime_pc={current.runtime_pc} ida_ea={current.ida_ea}"
             )
         self.view.log(f"status connected={connected} {pc_status} state={self.status}")
+
+    def show_live_variables(self) -> None:
+        """Show the Live Variables chooser."""
+        self.view.show()
 
     def _ask_target(self) -> str:
         default = f"{DEFAULT_HOST}:{DEFAULT_PORT}"
@@ -191,7 +197,6 @@ class DayVarController:
 
         runtime_pc_text = format_hex(mapping.runtime_pc)
         ida_ea_text = format_hex(mapping.ida_ea)
-        self.core.start_pc_context(mapping.pc_seq, runtime_pc_text, ida_ea_text)
         self._jump_to(mapping.ida_ea)
 
         mapped = self.core.make_ida_pc_mapped(
@@ -204,30 +209,60 @@ class DayVarController:
         )
         self.view.show_mapping(mapped["payload"])
         self._send(mapped)
-        self._send(self.core.make_reg_request(mapping.pc_seq, runtime_pc_text))
+
+        enumeration = enumerate_hexrays_variables(mapping.ida_ea, current_pc=runtime_pc_text)
+        if not enumeration.ok:
+            self.core.start_pc_context(
+                pc_seq=mapping.pc_seq,
+                runtime_pc=runtime_pc_text,
+                ida_ea=ida_ea_text,
+                function_ea=enumeration.function_ea,
+                at_function_entry=False,
+            )
+            self.view.update_rows([])
+            self.view.log(enumeration.error)
+            return
+
+        at_function_entry = enumeration.function_start_ea == mapping.ida_ea
+        plan = self.core.build_entry_plan(
+            variables=enumeration.variables,
+            pc_seq=mapping.pc_seq,
+            runtime_pc=runtime_pc_text,
+            ida_ea=ida_ea_text,
+            function_ea=enumeration.function_ea,
+            at_function_entry=at_function_entry,
+        )
+        self.view.log(
+            "enumerated {count} Hex-Rays variables function={function_ea} at_entry={at_entry}".format(
+                count=len(enumeration.variables),
+                function_ea=enumeration.function_ea,
+                at_entry=at_function_entry,
+            )
+        )
+        for line in plan.debug_lines:
+            self.view.log(line)
+        self.view.update_rows(self.core.rows)
+        if plan.register_request is not None:
+            self._send(plan.register_request)
 
     def _handle_reg_response(self, payload: dict[str, Any]) -> None:
-        accepted, reason = self.core.accept_response(payload)
+        accepted, reason, mem_requests = self.core.apply_reg_response(payload)
         if not accepted:
             self.view.log(f"ignored reg_response: {reason}")
             return
 
         self.view.show_reg_response(payload)
-        if payload.get("ok") is not True:
-            return
-
-        mem_request = self.core.make_mem_request_from_rsp(payload)
-        if mem_request is None:
-            self.view.log("cannot request memory: reg_response has no rsp")
-            return
-        self._send(mem_request)
+        self.view.update_rows(self.core.rows)
+        for mem_request in mem_requests:
+            self._send(mem_request)
 
     def _handle_mem_response(self, payload: dict[str, Any]) -> None:
-        accepted, reason = self.core.accept_response(payload)
+        accepted, reason = self.core.apply_mem_response(payload)
         if not accepted:
             self.view.log(f"ignored mem_response: {reason}")
             return
         self.view.show_mem_response(payload)
+        self.view.update_rows(self.core.rows)
 
     def _get_imagebase(self) -> int:
         if idaapi is None:
@@ -289,6 +324,7 @@ def install_plugin() -> None:
     _register_action(ACTION_CONNECT, "DayVarSync: Connect", _controller.connect)
     _register_action(ACTION_DISCONNECT, "DayVarSync: Disconnect", _controller.disconnect)
     _register_action(ACTION_STATUS, "DayVarSync: Status", _controller.show_status)
+    _register_action(ACTION_SHOW_LIVE, "DayVarSync: Show Live Variables", _controller.show_live_variables)
 
     ida_kernwin.attach_action_to_menu("Edit/DayVarSync/Connect", ACTION_CONNECT, ida_kernwin.SETMENU_APP)
     ida_kernwin.attach_action_to_menu(
@@ -297,6 +333,11 @@ def install_plugin() -> None:
         ida_kernwin.SETMENU_APP,
     )
     ida_kernwin.attach_action_to_menu("Edit/DayVarSync/Status", ACTION_STATUS, ida_kernwin.SETMENU_APP)
+    ida_kernwin.attach_action_to_menu(
+        "Edit/DayVarSync/Show Live Variables",
+        ACTION_SHOW_LIVE,
+        ida_kernwin.SETMENU_APP,
+    )
     _controller.view.log("actions registered under Edit/DayVarSync")
 
 
@@ -305,13 +346,13 @@ def uninstall_plugin() -> None:
     _controller.disconnect()
     if ida_kernwin is None:
         return
-    for action in (ACTION_CONNECT, ACTION_DISCONNECT, ACTION_STATUS):
+    for action in (ACTION_CONNECT, ACTION_DISCONNECT, ACTION_STATUS, ACTION_SHOW_LIVE):
         ida_kernwin.unregister_action(action)
 
 
 def plugin_status() -> str:
     """Return the current implementation status."""
-    return "ida plugin: broker connection and auto-live reg/mem flow implemented"
+    return "ida plugin: Hex-Rays enumeration and exact-entry argument reads implemented"
 
 
 if ida_idaapi is not None:

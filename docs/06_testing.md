@@ -194,8 +194,9 @@ python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
 In IDA on the Windows host:
 
 ```text
-Run/load ida_plugin/dayvar_plugin.py
-Edit -> DayVarSync -> Connect
+Load ida_plugin/dayvar_plugin.py
+DayVarSync -> Connect
+Open/decompile a function near the synced PC
 ```
 
 The connect action prompts for a broker endpoint. Use:
@@ -229,8 +230,15 @@ Expected IDA output log:
 ```text
 [DayVarSync] hello_ack ...
 [DayVarSync] pc_seq=<n> runtime_pc=<pc> ida_ea=<ea> module=<module>
-[DayVarSync] reg_response pc_seq=<n> request_id=reg-<n>-1 ok=True ...
-[DayVarSync] mem_response pc_seq=<n> request_id=mem-<n>-rsp ok=True ...
+[DayVarSync] enumerated <count> Hex-Rays variables function=<ea> at_entry=<bool>
+[DayVarSync] request plan function=<ea> at_entry=True variables=<count>
+[DayVarSync] detected arg0 name=<name> location=<location>
+[DayVarSync] registers requested=['rcx', ...]
+[DayVarSync] stack args requested=[...]
+[DayVarSync] send type=reg_request id=<n>
+[DayVarSync] reg_response pc_seq=<n> request_id=reg-<n>-entry ok=True
+[DayVarSync] send type=mem_request id=<n>
+[DayVarSync] mem_response pc_seq=<n> request_id=mem-<n>-<name> ok=True ...
 ```
 
 The plugin computes:
@@ -239,17 +247,28 @@ The plugin computes:
 ida_ea = idaapi.get_imagebase() + (runtime_pc - runtime_module_base)
 ```
 
-and jumps IDA to that address. If a response has an old `pc_seq`, mismatched
-`runtime_pc`, or unknown `request_id`, it is logged and ignored.
+and jumps IDA to that address. It then uses Hex-Rays to enumerate `cfunc.lvars`
+for the current function and refreshes the `DayVarSync Live Variables` table.
+If a response has an old `pc_seq`, mismatched `runtime_pc`, or unknown
+`request_id`, it is logged and ignored.
+
+Expected Live Variables behavior:
+
+- Argument rows are listed with `ArgIndex`.
+- At exact function entry, args 0..3 can become `fresh/exact_entry`.
+- At exact function entry, args 4+ can become `fresh/exact_entry` after the
+  stack slot memory read succeeds.
+- Away from function entry, preserved entry values are marked `stale`.
+- Unsupported `v*` variables are listed as
+  `unavailable/unsupported_variable`.
 
 Current real IDA plugin limitations:
 
-- Fixed register request only: `rcx`, `rdx`, `r8`, `r9`, `rsp`.
-- One test memory read only: 8 bytes at `rsp`.
-- No Hex-Rays variable extraction.
-- No `v*` recovery.
-- No argument mapping.
-- No stack argument logic.
+- Argument runtime values are exact only at function entry.
+- Stack arguments are read as raw 8-byte memory slots.
+- No real `v*` recovery.
+- No microcode analysis.
+- No complex register lifetime tracking.
 - No stepping.
 - No pseudocode overlays.
 
@@ -278,6 +297,9 @@ Expected: no hang, no crash, useful broker logs, and bounded command pumping.
 - Run `!dvs_pc`.
 
 Expected: IDA maps runtime PC to IDA EA and jumps to the expected location.
+The Live Variables table should show Hex-Rays variables if decompilation
+succeeds. If Hex-Rays is unavailable or decompilation fails, PC sync should
+still work and the plugin should log the failure clearly.
 
 ## Variable Tests
 
