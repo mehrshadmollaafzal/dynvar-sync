@@ -1,9 +1,11 @@
 # dynvar-sync-version2
 
-`dynvar-sync-version2` is a synchronization system between IDA Pro 9.3
-and WinDbg Preview for Windows x64 targets. It synchronizes the debugger's
-runtime PC with IDA and display confidence-tagged runtime values for supported
-Hex-Rays variables.
+`dynvar-sync-version2` is the current DayVarSync research prototype: a
+best-effort, confidence-aware synchronization system between IDA Pro 9.3 and
+WinDbg Preview for Windows x64 targets. It synchronizes the debugger's runtime
+PC with IDA and displays confidence-tagged runtime values for supported
+Hex-Rays variables. It is not a source-level debugger and does not guarantee
+recovery of every Hex-Rays lvar.
 
 Current status: broker routing, WinDbg DbgEng-derived PC/register/memory
 responses, and a real IDA-side plugin for the current auto-live flow. The IDA
@@ -258,6 +260,9 @@ python3 -m unittest -v \
   samples.test_v_variable_recovery \
   samples.test_v_variable_cfg
 ```
+
+For the measured support matrix and closure baseline, see
+`docs/07_research_prototype_status.md`.
 
 For manual IDA/WinDbg transitions, build and follow
 `samples/vvar_probe/README.md`.

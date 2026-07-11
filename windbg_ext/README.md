@@ -145,7 +145,8 @@ and `runtime_pc`.
 
 Current limitations:
 
-- No Hex-Rays `v*` variable recovery yet.
+- No Hex-Rays `v*` variable interpretation in the WinDbg extension. IDA owns
+  the current best-effort local recovery layer.
 - No decompiler semantics in the WinDbg extension.
 
 The extension must stay low-level. It must not parse Hex-Rays variables, infer

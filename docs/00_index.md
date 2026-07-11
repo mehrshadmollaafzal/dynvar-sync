@@ -9,5 +9,7 @@ documentation for the implementation tree.
 - `04_auto_live_refresh.md` - One-command PC sync plus live refresh flow.
 - `05_development_rules.md` - Constraints for implementation work.
 - `06_testing.md` - Validation strategy and early test scenarios.
+- `07_research_prototype_status.md` - Measured support matrix and closure
+  baseline for the research prototype.
 
 The original `ForCodex/` planning folder is intentionally retained unchanged.
