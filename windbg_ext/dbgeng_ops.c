@@ -79,6 +79,61 @@ static unsigned long long DvsDebugValueToU64(const DEBUG_VALUE *value)
     }
 }
 
+int DvsReadCurrentContextIds(
+    PDEBUG_CLIENT client,
+    unsigned long *process_id,
+    unsigned long *thread_id)
+{
+    HRESULT hr;
+    PDEBUG_SYSTEM_OBJECTS system_objects = NULL;
+    ULONG current_process_id = DEBUG_ANY_ID;
+    ULONG current_thread_id = DEBUG_ANY_ID;
+
+    if (process_id != NULL) {
+        *process_id = DEBUG_ANY_ID;
+    }
+    if (thread_id != NULL) {
+        *thread_id = DEBUG_ANY_ID;
+    }
+    if (client == NULL || process_id == NULL || thread_id == NULL) {
+        DvsSetDbgEngLastErrorText("invalid context id arguments");
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = client->lpVtbl->QueryInterface(
+        client,
+        &IID_IDebugSystemObjects,
+        (void **)&system_objects);
+    if (FAILED(hr) || system_objects == NULL) {
+        DvsSetDbgEngLastError("QueryInterface(IDebugSystemObjects) failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = system_objects->lpVtbl->GetCurrentProcessId(system_objects, &current_process_id);
+    if (FAILED(hr)) {
+        system_objects->lpVtbl->Release(system_objects);
+        DvsSetDbgEngLastError("IDebugSystemObjects::GetCurrentProcessId failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    hr = system_objects->lpVtbl->GetCurrentThreadId(system_objects, &current_thread_id);
+    system_objects->lpVtbl->Release(system_objects);
+    if (FAILED(hr)) {
+        DvsSetDbgEngLastError("IDebugSystemObjects::GetCurrentThreadId failed", hr);
+        return DVS_DBGENG_ERROR;
+    }
+
+    if (current_process_id == DEBUG_ANY_ID || current_thread_id == DEBUG_ANY_ID) {
+        DvsSetDbgEngLastErrorText("current process or thread context is invalid");
+        return DVS_DBGENG_ERROR;
+    }
+
+    *process_id = current_process_id;
+    *thread_id = current_thread_id;
+    DvsSetDbgEngLastErrorText("ok");
+    return DVS_DBGENG_OK;
+}
+
 int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
 {
     HRESULT hr;
@@ -88,6 +143,10 @@ int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
     ULONG64 module_base = 0;
     ULONG image_name_size = 0;
     ULONG module_name_size = 0;
+    unsigned long process_id_before = DEBUG_ANY_ID;
+    unsigned long thread_id_before = DEBUG_ANY_ID;
+    unsigned long process_id_after = DEBUG_ANY_ID;
+    unsigned long thread_id_after = DEBUG_ANY_ID;
     char image_name[DVS_MODULE_NAME_MAX];
     char module_name[DVS_MODULE_NAME_MAX];
 
@@ -99,6 +158,10 @@ int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
     memset(info, 0, sizeof(*info));
     memset(image_name, 0, sizeof(image_name));
     memset(module_name, 0, sizeof(module_name));
+
+    if (DvsReadCurrentContextIds(client, &process_id_before, &thread_id_before) != DVS_DBGENG_OK) {
+        return DVS_DBGENG_ERROR;
+    }
 
     hr = client->lpVtbl->QueryInterface(
         client,
@@ -162,6 +225,17 @@ int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info)
         DvsSetDbgEngLastErrorText("module name is empty");
         return DVS_DBGENG_ERROR;
     }
+
+    if (DvsReadCurrentContextIds(client, &process_id_after, &thread_id_after) != DVS_DBGENG_OK) {
+        return DVS_DBGENG_ERROR;
+    }
+    if (process_id_before != process_id_after || thread_id_before != thread_id_after) {
+        DvsSetDbgEngLastErrorText("current process or thread context changed during PC lookup");
+        return DVS_DBGENG_ERROR;
+    }
+
+    info->process_id = process_id_before;
+    info->thread_id = thread_id_before;
 
     DvsSetDbgEngLastErrorText("ok");
     return DVS_DBGENG_OK;
@@ -325,7 +399,7 @@ int DvsStepExecution(PDEBUG_CLIENT client, char mode, unsigned long count)
     return DVS_DBGENG_OK;
 }
 
-int DvsIsExecutionStopped(PDEBUG_CLIENT client, unsigned long *status_out)
+int DvsGetExecutionStatus(PDEBUG_CLIENT client, unsigned long *status_out)
 {
     HRESULT hr;
     PDEBUG_CONTROL control = NULL;
@@ -358,11 +432,6 @@ int DvsIsExecutionStopped(PDEBUG_CLIENT client, unsigned long *status_out)
     if (status_out != NULL) {
         *status_out = status;
     }
-    if (status != DEBUG_STATUS_BREAK) {
-        DvsSetDbgEngLastErrorText("debuggee is not stopped at break status");
-        return DVS_DBGENG_ERROR;
-    }
-
     DvsSetDbgEngLastErrorText("ok");
     return DVS_DBGENG_OK;
 }

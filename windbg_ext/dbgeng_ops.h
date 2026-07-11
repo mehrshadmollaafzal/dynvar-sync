@@ -13,6 +13,8 @@
 #define DVS_MAX_MEMORY_READ_SIZE 4096
 
 typedef struct DVS_PC_INFO {
+    unsigned long process_id;
+    unsigned long thread_id;
     unsigned long long pc;
     unsigned long long runtime_module_base;
     char module[DVS_MODULE_NAME_MAX];
@@ -24,6 +26,10 @@ typedef struct DVS_REGISTER_VALUE {
     int ok;
 } DVS_REGISTER_VALUE;
 
+int DvsReadCurrentContextIds(
+    PDEBUG_CLIENT client,
+    unsigned long *process_id,
+    unsigned long *thread_id);
 int DvsReadCurrentPcInfo(PDEBUG_CLIENT client, DVS_PC_INFO *info);
 int DvsReadRegisters(
     PDEBUG_CLIENT client,
@@ -38,7 +44,7 @@ int DvsReadVirtualMemory(
     unsigned char *bytes,
     unsigned long *bytes_read);
 int DvsStepExecution(PDEBUG_CLIENT client, char mode, unsigned long count);
-int DvsIsExecutionStopped(PDEBUG_CLIENT client, unsigned long *status_out);
+int DvsGetExecutionStatus(PDEBUG_CLIENT client, unsigned long *status_out);
 const char *DvsDbgEngLastError(void);
 
 #endif

@@ -34,6 +34,8 @@ static int g_step_in_progress = 0;
 static char g_step_mode = '\0';
 static unsigned long g_step_remaining = 0;
 static PDEBUG_CLIENT g_step_client = NULL;
+static unsigned long g_step_process_id = DEBUG_ANY_ID;
+static unsigned long g_step_thread_id = DEBUG_ANY_ID;
 
 static void DvsCopyString(char *dst, unsigned long dst_size, const char *src)
 {
@@ -112,6 +114,8 @@ static void DvsClearPendingStep(PDEBUG_CLIENT client, const char *reason)
     g_step_in_progress = 0;
     g_step_mode = '\0';
     g_step_remaining = 0;
+    g_step_process_id = DEBUG_ANY_ID;
+    g_step_thread_id = DEBUG_ANY_ID;
     DvsReleaseStepClient();
 }
 
@@ -551,7 +555,14 @@ static int DvsSendPcUpdateAndPump(PDEBUG_CLIENT Client, const char *reason)
     }
 
     if (strcmp(reason, "dvs_step") == 0) {
-        DvsOutput(Client, "dayvar: post-step pc=0x%016llx\n", pc_info.pc);
+        DvsOutput(
+            Client,
+            "dayvar: post-step context process_id=%lu thread_id=%lu pc=0x%016llx module=%s base=0x%016llx client=command_client\n",
+            pc_info.process_id,
+            pc_info.thread_id,
+            pc_info.pc,
+            pc_info.module,
+            pc_info.runtime_module_base);
     }
 
     message_id = DvsNextMessageId();
@@ -597,7 +608,13 @@ static int DvsInitiateNextPendingStep(void)
     }
 
     remaining_before = g_step_remaining;
-    DvsOutput(g_step_client, "dayvar: step initiated mode=%c remaining=%lu\n", g_step_mode, remaining_before);
+    DvsOutput(
+        g_step_client,
+        "dayvar: step initiated mode=%c remaining=%lu process_id=%lu thread_id=%lu client=command_client\n",
+        g_step_mode,
+        remaining_before,
+        g_step_process_id,
+        g_step_thread_id);
     if (DvsStepExecution(g_step_client, g_step_mode, 1) != DVS_DBGENG_OK) {
         DvsOutput(g_step_client, "dayvar: step initiation failed: %s\n", DvsDbgEngLastError());
         DvsClearPendingStep(g_step_client, "step initiation failed");
@@ -618,12 +635,20 @@ static void DvsHandlePostStepAccessible(void)
     }
 
     DvsOutput(g_step_client, "dayvar: post-step session accessible\n");
-    if (DvsIsExecutionStopped(g_step_client, &status) != DVS_DBGENG_OK) {
+    if (DvsGetExecutionStatus(g_step_client, &status) != DVS_DBGENG_OK) {
         DvsOutput(
             g_step_client,
-            "dayvar: post-step sync skipped: execution status=%lu error=%s\n",
+            "dayvar: post-step execution-status read failed status=%lu error=%s client=command_client\n",
             status,
             DvsDbgEngLastError());
+        DvsClearPendingStep(g_step_client, "post-step execution-status read failed");
+        return;
+    }
+    if (status != DEBUG_STATUS_BREAK) {
+        DvsOutput(
+            g_step_client,
+            "dayvar: post-step not ready execution_status=%lu client=command_client\n",
+            status);
         return;
     }
 
@@ -786,6 +811,8 @@ __declspec(dllexport) HRESULT CALLBACK dvs_step(PDEBUG_CLIENT Client, PCSTR args
 {
     char mode = '\0';
     unsigned long count = 1;
+    unsigned long process_id = DEBUG_ANY_ID;
+    unsigned long thread_id = DEBUG_ANY_ID;
 
     if (!DvsParseStepArgs(args, &mode, &count)) {
         DvsOutput(Client, "usage: !dvs_step <p|t> [count]\n");
@@ -807,15 +834,26 @@ __declspec(dllexport) HRESULT CALLBACK dvs_step(PDEBUG_CLIENT Client, PCSTR args
         return E_FAIL;
     }
 
-    if (Client->lpVtbl->CreateClient(Client, &g_step_client) != S_OK || g_step_client == NULL) {
-        DvsOutput(Client, "dayvar: failed to create step client\n");
+    if (DvsReadCurrentContextIds(Client, &process_id, &thread_id) != DVS_DBGENG_OK) {
+        DvsOutput(Client, "dayvar: failed to capture step context: %s\n", DvsDbgEngLastError());
         return E_FAIL;
     }
+
+    g_step_client = Client;
+    g_step_client->lpVtbl->AddRef(g_step_client);
 
     g_step_pending = 1;
     g_step_in_progress = 0;
     g_step_mode = mode;
     g_step_remaining = count;
+    g_step_process_id = process_id;
+    g_step_thread_id = thread_id;
+
+    DvsOutput(
+        g_step_client,
+        "dayvar: step context captured process_id=%lu thread_id=%lu client=command_client\n",
+        g_step_process_id,
+        g_step_thread_id);
 
     if (!DvsInitiateNextPendingStep()) {
         return E_FAIL;
