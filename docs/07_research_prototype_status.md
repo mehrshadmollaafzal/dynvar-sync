@@ -57,6 +57,8 @@ guessed.
 | Address-taken or aliased variables | Unsupported | Shared, overlapped, byref, aliasable, or unresolved stack locals remain unavailable. |
 | Stale values | Supported baseline | Entry arguments and v-recovered locals preserve last exact values only as stale. Old `pc_seq`, mismatched `runtime_pc`, unexpected `request_id`, and mismatched memory address/size cannot become fresh. |
 | Optimized-away values | Unsupported | If Hex-Rays does not materialize a usable lvar/storage/definition, no value is recovered. Expression-only values remain unavailable. |
+| Diagnostics | Supported usability layer | Plugin diagnostics have one level setting: `quiet`, `normal`, `verbose`, or `trace`. Normal suppresses per-variable CFG noise; trace preserves full recovery diagnostics. |
+| Live Variables filters | Supported usability layer | The table can show All, Fresh, Recoverable, Arguments, Named locals, or Unavailable rows without destroying underlying row state. |
 
 ## Demonstrated Working Behavior
 
@@ -65,7 +67,9 @@ without IDA: exact entry argument requests, stack argument memory reads, stale
 argument transitions, v-recovery request namespaces, old-`pc_seq` rejection,
 register alias masking, little-endian exact-width memory decoding, constant
 rows without debugger reads, fresh-to-stale local history, mapping-failure
-invalidation, and isolated analysis failures.
+invalidation, isolated analysis failures, diagnostic-level suppression, filter
+predicates, active-filter preservation, bounded candidate selection, selection
+cache invalidation, and prioritization of fresh/stale rows.
 
 Synthetic CFG tests demonstrate the pure algorithms for current-block and
 predecessor reaching definitions, successor-block future uses, ambiguous
@@ -137,6 +141,13 @@ are the authoritative stale-response controls.
 The Live Variables view is a diagnostic table. Pseudocode overlays,
 watch-window editing, expression evaluation, source stepping, and source-level
 scope visualization are out of scope.
+
+For usability, the IDA plugin may analyze only a bounded subset of local
+candidates at a given PC. The selector prioritizes explicitly watched indexes,
+previously fresh/stale rows, rows visible under the current filter, and a
+rotating fallback set. This reduces normal interaction noise and cost, but it
+means a newly recoverable non-prioritized local may become visible after a later
+selection pass rather than on the first possible instruction.
 
 ## Known Implementation Gaps
 

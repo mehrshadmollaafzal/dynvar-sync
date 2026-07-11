@@ -258,7 +258,8 @@ Run outside-IDA regressions with:
 python3 -m unittest -v \
   samples.test_dynvar_core \
   samples.test_v_variable_recovery \
-  samples.test_v_variable_cfg
+  samples.test_v_variable_cfg \
+  samples.test_usability_controls
 ```
 
 For the measured support matrix and closure baseline, see

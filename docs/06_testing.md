@@ -292,7 +292,8 @@ Run the stdlib-only regression suite from the repository root:
 python3 -m unittest -v \
   samples.test_dynvar_core \
   samples.test_v_variable_recovery \
-  samples.test_v_variable_cfg
+  samples.test_v_variable_cfg \
+  samples.test_usability_controls
 ```
 
 The tests cover the unchanged entry-argument register/stack behavior and stale
@@ -305,6 +306,12 @@ definitions, diamonds, undefined paths, native register clobbers, exact
 pre-instruction semantics, and bounded forward/backward loops. They do not
 replace real IDA tests because SWIG ctree/microcode and processor-module
 register-access APIs are available only inside IDA.
+
+Usability coverage includes diagnostic-level suppression and trace retention,
+Live Variables filter predicates, recoverable/argument/named-local filters,
+active-filter state preservation, bounded candidate selection, selection cache
+invalidation, fresh/stale prioritization, and stale response rejection with
+bounded selection enabled.
 
 ## PsOpenProcess Cross-Block Register Test
 

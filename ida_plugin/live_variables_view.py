@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from hexrays_variables import VariableRecord
+from hexrays_variables import VariableRecord, is_v_temporary_name
 
 try:
     import ida_kernwin  # type: ignore
@@ -33,6 +33,92 @@ COLUMNS = (
     "Storage",
     "Last Update PC",
 )
+
+FILTER_ALL = "All"
+FILTER_FRESH = "Fresh"
+FILTER_RECOVERABLE = "Recoverable"
+FILTER_ARGUMENTS = "Arguments"
+FILTER_NAMED_LOCALS = "Named locals"
+FILTER_UNAVAILABLE = "Unavailable"
+
+FILTERS = (
+    FILTER_ALL,
+    FILTER_FRESH,
+    FILTER_RECOVERABLE,
+    FILTER_ARGUMENTS,
+    FILTER_NAMED_LOCALS,
+    FILTER_UNAVAILABLE,
+)
+
+
+def is_exact_row(row: VariableRecord) -> bool:
+    return row.status == "fresh" and row.confidence.startswith("exact_")
+
+
+def is_recoverable_row(row: VariableRecord) -> bool:
+    """Return true for rows with a current or retained exact observation."""
+    if row.status == "fresh" and row.value:
+        return True
+    if row.status == "stale" and (
+        row.value or row.last_success_value or row.last_success_pc_seq is not None
+    ):
+        return True
+    return False
+
+
+def is_named_local_row(row: VariableRecord) -> bool:
+    return (
+        not row.is_arg
+        and bool(row.name)
+        and row.name != "<unnamed>"
+        and not is_v_temporary_name(row.name)
+    )
+
+
+def row_matches_filter(row: VariableRecord, filter_name: str) -> bool:
+    if filter_name == FILTER_ALL:
+        return True
+    if filter_name == FILTER_FRESH:
+        return row.status == "fresh"
+    if filter_name == FILTER_RECOVERABLE:
+        return is_recoverable_row(row)
+    if filter_name == FILTER_ARGUMENTS:
+        return row.is_arg
+    if filter_name == FILTER_NAMED_LOCALS:
+        return is_named_local_row(row)
+    if filter_name == FILTER_UNAVAILABLE:
+        return row.status == "unavailable"
+    return True
+
+
+def presented_status(row: VariableRecord) -> str:
+    """Map internal status/confidence/reason to a conservative UI label."""
+    if is_exact_row(row):
+        return "exact"
+    if row.status == "stale":
+        return "stale / last observed"
+    reason = row.reason or ""
+    confidence = row.confidence or ""
+    if reason == "no_reaching_definition":
+        return "not yet defined"
+    if reason in {
+        "ambiguous_register_location",
+        "ambiguous_reaching_definition",
+        "cross_block_liveness_unproven",
+    }:
+        return "ambiguous"
+    if reason in {
+        "unsupported_scattered_location",
+        "unsupported_value_width",
+    }:
+        return "unsupported storage"
+    if "alias" in reason or "byref" in reason or "address" in reason and "match" not in reason:
+        return "address taken / alias unknown"
+    if confidence == "unsupported_variable" and reason == "variable does not have a reliable runtime location in v1":
+        return "optimized away / not materialized"
+    if row.status == "unavailable":
+        return "unavailable"
+    return row.status
 
 
 if ida_kernwin is not None:
@@ -74,7 +160,9 @@ class LiveVariablesView:
     """Live Variables chooser with output-window logging."""
 
     def __init__(self) -> None:
+        self.all_rows: list[VariableRecord] = []
         self.rows: list[VariableRecord] = []
+        self.active_filter = FILTER_ALL
         self.chooser: Any | None = None
 
     def log(self, message: str) -> None:
@@ -95,8 +183,25 @@ class LiveVariablesView:
         self.chooser.Show(False)
 
     def update_rows(self, rows: list[VariableRecord]) -> None:
-        """Replace rows and refresh the chooser/log view."""
-        self.rows = list(rows)
+        """Replace underlying rows and refresh the filtered chooser/log view."""
+        self.all_rows = list(rows)
+        self._apply_filter()
+        self._refresh()
+
+    def set_filter(self, filter_name: str) -> None:
+        """Set the active display filter without losing underlying row state."""
+        if filter_name not in FILTERS:
+            raise ValueError(f"unknown Live Variables filter: {filter_name}")
+        self.active_filter = filter_name
+        self._apply_filter()
+        self._refresh()
+
+    def _apply_filter(self) -> None:
+        self.rows = [
+            row for row in self.all_rows if row_matches_filter(row, self.active_filter)
+        ]
+
+    def _refresh(self) -> None:
         if ida_kernwin is not None:
             if self.chooser is None:
                 self.chooser = _LiveVariablesChooser(self)
@@ -115,7 +220,7 @@ class LiveVariablesView:
             "" if row.size == 0 else str(row.size),
             row.location,
             row.value,
-            row.status,
+            presented_status(row),
             row.confidence,
             row.reason,
             str(row.lvar_index),

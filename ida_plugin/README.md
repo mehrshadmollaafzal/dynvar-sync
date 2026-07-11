@@ -24,6 +24,12 @@ Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
 - `DayVarSync: Disconnect`
 - `DayVarSync: Status`
 - `DayVarSync: Show Live Variables`
+- `DayVarSync Filter: All`
+- `DayVarSync Filter: Fresh`
+- `DayVarSync Filter: Recoverable`
+- `DayVarSync Filter: Arguments`
+- `DayVarSync Filter: Named locals`
+- `DayVarSync Filter: Unavailable`
 
 `Connect` prompts for a broker `host:port` and defaults to:
 
@@ -34,6 +40,18 @@ Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
 The connection runs in a background socket thread so the IDA UI does not block
 when the broker is unavailable. Incoming messages are marshalled back onto the
 IDA UI thread before using IDA APIs.
+
+The plugin has one diagnostic configuration point in `dayvar_plugin.py`:
+
+```python
+PLUGIN_DIAGNOSTIC_LEVEL = "normal"
+```
+
+Accepted levels are `quiet`, `normal`, `verbose`, and `trace`. Normal mode
+logs lifecycle events, PC mapping, fresh/stale transitions, and failures.
+Verbose mode adds request summaries, unsupported reasons, and one compact
+analysis summary per PC. Trace mode preserves full per-variable CFG,
+reaching-definition, storage, and correlation diagnostics.
 
 For each `pc_update(auto_live=true)`, IDA maps:
 
@@ -56,6 +74,12 @@ separate evidence model, history, and `v-reg-*`/`v-mem-*` request namespace.
 The recovery layer records lvar index, type/width, printed location, function
 and current EAs, candidate storage, source definition EA, status/confidence,
 and last successful value/`pc_seq` for every non-argument lvar.
+
+For usability, full local analysis is bounded per PC. The selector prioritizes
+watched indexes, rows that are already fresh or stale, rows visible under the
+active filter, and a rotating fallback set for discovery. This does not change
+the recovery proof rules: unselected rows remain unavailable or retain only a
+stale last-observed value until selected on a later PC.
 
 ## First Supported Local/`v*` Subset
 
@@ -146,6 +170,10 @@ Value display is normalized in the Live Variables table:
 - Raw memory bytes are kept in the row reason for stack reads.
 - The existing table columns remain, with `LvarIndex`, `Type`, `Source EA`,
   `Storage`, and `Last Update PC` appended.
+- The Status column presents clearer labels such as `exact`,
+  `stale / last observed`, `not yet defined`, `ambiguous`,
+  `unsupported storage`, and `unavailable` while preserving the internal
+  status/confidence fields.
 
 ## Manual Test
 
@@ -198,8 +226,11 @@ Expected IDA behavior:
   confidences above.
 - Unsupported/ambiguous locals remain unavailable with a concrete reason, or
   retain only a stale last-success value.
-- IDA output includes `v-candidate`, `v-recovery`, and `v-request` diagnostics.
-- CFG diagnostics include `v-cfg-point`, `v-reaching-def`,
+- In normal diagnostics, IDA output includes lifecycle events and fresh/stale
+  transitions without full per-lvar CFG details.
+- In trace diagnostics, IDA output includes `v-candidate`, `v-recovery`, and
+  `v-request` diagnostics.
+- Trace CFG diagnostics include `v-cfg-point`, `v-reaching-def`,
   `v-cross-block-live`, and `v-storage-valid` before the final recovery and
   request lines.
 

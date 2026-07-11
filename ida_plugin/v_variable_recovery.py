@@ -54,6 +54,7 @@ REASON_AMBIGUOUS_REACHING_DEFINITION = "ambiguous_reaching_definition"
 REASON_CROSS_BLOCK_LIVENESS_UNPROVEN = "cross_block_liveness_unproven"
 REASON_STORAGE_CLOBBERED = "storage_clobbered_before_current_pc"
 REASON_UNRESOLVED_NATIVE_POINT = "unresolved_native_program_point"
+REASON_ANALYSIS_DEFERRED = "analysis_deferred"
 
 SUPPORTED_WIDTHS = (1, 2, 4, 8)
 
@@ -279,8 +280,14 @@ AnalysisProvider = Callable[
 class VVariableRecovery:
     """Own non-argument lvar plans, history, and correlated runtime reads."""
 
-    def __init__(self, analysis_provider: AnalysisProvider | None = None) -> None:
+    def __init__(
+        self,
+        analysis_provider: AnalysisProvider | None = None,
+        *,
+        max_history: int = 256,
+    ) -> None:
         self._analysis_provider = analysis_provider or analyze_v_variable_candidates
+        self._max_history = max(1, max_history)
         self._history: dict[tuple[int, int], _HistoryValue] = {}
         self._records: dict[int, VVariableRecoveryRecord] = {}
         self._evidence: dict[int, RecoveryEvidence] = {}
@@ -310,14 +317,23 @@ class VVariableRecovery:
         pc_seq: int,
         envelope: EnvelopeFactory,
         cfunc: object | None = None,
+        analysis_lvar_indexes: set[int] | None = None,
     ) -> VRecoveryPlan:
         """Rebuild and revalidate every non-argument lvar for a mapped PC."""
         self._start_context(function_ea, current_ea, runtime_pc, pc_seq)
         local_variables = [variable for variable in variables if not variable.is_arg]
         self._source_variables = list(local_variables)
+        selected_indexes = (
+            {variable.lvar_index for variable in local_variables}
+            if analysis_lvar_indexes is None
+            else set(analysis_lvar_indexes)
+        )
+        analysis_variables = [
+            variable for variable in local_variables if variable.lvar_index in selected_indexes
+        ]
 
         try:
-            analysis = self._analysis_provider(function_ea, current_ea, local_variables, cfunc)
+            analysis = self._analysis_provider(function_ea, current_ea, analysis_variables, cfunc)
         except Exception as exc:  # Recovery must never break PC sync/arguments.
             analysis = RecoveryAnalysis(
                 ok=False,
@@ -345,10 +361,16 @@ class VVariableRecovery:
             )
 
             if analysis.ok:
-                evidence = self._evidence.get(
-                    variable.lvar_index,
-                    RecoveryEvidence(variable.lvar_index),
-                )
+                if variable.lvar_index in selected_indexes:
+                    evidence = self._evidence.get(
+                        variable.lvar_index,
+                        RecoveryEvidence(variable.lvar_index),
+                    )
+                else:
+                    evidence = RecoveryEvidence(
+                        variable.lvar_index,
+                        reason=REASON_ANALYSIS_DEFERRED,
+                    )
             else:
                 evidence = RecoveryEvidence(
                     variable.lvar_index,
@@ -416,6 +438,17 @@ class VVariableRecovery:
     def invalidate_pc(self, *, pc_seq: int, runtime_pc: str) -> None:
         """Reject all prior v responses when variable enumeration is unavailable."""
         self._start_context(0, 0, runtime_pc, pc_seq)
+
+    def clear_runtime_state(self) -> None:
+        """Drop pending runtime context without changing proven history."""
+        self._pc_seq = None
+        self._runtime_pc = ""
+        self._function_ea = 0
+        self._current_ea = 0
+        self._pending.clear()
+        self._records.clear()
+        self._evidence.clear()
+        self._source_variables.clear()
 
     def apply_reg_response(
         self,
@@ -694,6 +727,18 @@ class VVariableRecovery:
             runtime_pc=record.current_runtime_pc,
             source_ea=record.source_ea,
         )
+        self._prune_history()
+
+    def _prune_history(self) -> None:
+        overflow = len(self._history) - self._max_history
+        if overflow <= 0:
+            return
+        oldest = sorted(
+            self._history,
+            key=lambda key: self._history[key].pc_seq,
+        )
+        for key in oldest[:overflow]:
+            self._history.pop(key, None)
 
     def _row_lvar_defea(self, lvar_index: int) -> str:
         for row in getattr(self, "_source_variables", ()):
