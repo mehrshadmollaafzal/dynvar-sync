@@ -1,9 +1,9 @@
 # Variable Model
 
-Hex-Rays variables are not always real runtime storage locations. Function
-arguments and explicit memory watches can often be read reliably, but many
-temporaries named like `v1`, `v2`, or `v160` are analysis artifacts, optimized
-values, or expressions.
+Hex-Rays variables are not always real runtime storage locations. Arguments
+and explicit memory objects can often be read reliably, but many locals named
+like `v1` or `v160` are optimized expressions or have storage only during part
+of a function.
 
 Core rule:
 
@@ -11,20 +11,25 @@ Core rule:
 Unavailable is better than wrong.
 ```
 
-The project must always distinguish:
+The internal protocol/status fields remain compact, while the UI may present
+clearer labels. Every row is one of:
 
-- `fresh` - valid for the current PC and current `pc_seq`.
-- `stale` - previously valid, but not guaranteed for the current PC.
-- `unavailable` - no reliable value is currently available.
-- `error` - a supported read failed.
+- `fresh` - an exact current value proven for the current PC and `pc_seq`.
+- `stale` - stale / last observed; previously exact, but not valid as an exact
+  current value.
+- `unavailable` - no reliable current value exists.
+- `error` - a proven runtime read was attempted and failed.
 
-In the UI, unsupported variables may be displayed as unavailable with
-`confidence = unsupported_variable`, but the reason must make the unsupported
-classification explicit.
+User-facing unavailable reasons include `not yet defined`, `ambiguous`,
+`unsupported storage`, `address taken / alias unknown`, and
+`optimized away / not materialized`. The UI uses those labels only when the
+current analysis reason supports the distinction; otherwise the row remains
+plain `unavailable`.
 
-## Initial Supported Variables
+## Existing Argument Baseline
 
-At exact Windows x64 function entry:
+Argument handling remains separate from local/`v*` recovery. At exact Windows
+x64 function entry:
 
 ```text
 arg0 -> rcx
@@ -36,118 +41,215 @@ arg5 -> [rsp + 0x30]
 arg6 -> [rsp + 0x38]
 ```
 
-This mapping is exact only when the mapped IDA EA equals the function start EA.
-After stepping or syncing inside the function body, entry-derived values must
-become stale, and missing values remain unavailable.
-
-The current plugin requests only the low-level runtime facts needed for the
-arguments Hex-Rays actually enumerated:
-
-- `rcx`, `rdx`, `r8`, and `r9` for arguments 0..3.
-- `rsp` only when argument 4 or later exists.
-- One `mem_request` per stack argument after `rsp` is known.
-
-Stack arguments are read from:
+The entry planner requests only registers needed by enumerated arguments and
+requests `rsp` only for argument 4 or later. Stack arguments use:
 
 ```text
 [rsp + 0x28 + 8 * (arg_index - 4)]
 ```
 
-For stack arguments, the plugin reads the variable size when it is safely one
-of 1, 2, 4, or 8 bytes. Other sizes currently fall back to an 8-byte slot read.
-Memory bytes are decoded as little-endian numeric hex for 1/2/4/8-byte reads,
-and the raw bytes are kept in the reason/log text.
+Argument register values are masked to a reported 1/2/4/8-byte width. Stack
+arguments read that width when supported, otherwise the existing path reads
+one 8-byte ABI slot. Successful entry reads are `fresh/exact_entry`. Away from
+entry, captured values remain only `stale/stale_entry_value`.
 
-Register values are normalized as canonical `0x...` hex. If Hex-Rays reports a
-1/2/4/8-byte argument type, the display masks the register value to that width.
+## Per-PC Local/`v*` Model
 
-## Initial Unsupported Variables
-
-Do not guess values for:
-
-- Arbitrary Hex-Rays locals.
-- Arbitrary `v*` temporaries.
-- Expression-only variables.
-- Register locations after unknown instruction flow.
-- Variables from inlined functions.
-
-Recommended display:
+Every successfully mapped `pc_update` rebuilds a model for each non-argument
+entry in `cfunc.lvars`:
 
 ```text
-status = unavailable
-confidence = unsupported_variable
-reason = variable does not have a reliable runtime location in v1
+lvar index
+name
+type and width
+printed Hex-Rays location
+function EA
+current mapped EA
+candidate storage kind and storage
+source definition EA
+recovery status, confidence, and reason
+last successful value and pc_seq
+last update runtime PC
 ```
 
-The Live Variables table still lists unsupported `v*` rows because the
-long-term goal is to recover some of them later. Listing them now makes the
-unsupported state explicit and prevents misleading blanks or guessed values.
+The printed `lvar.location` is diagnostic text only. It can never authorize a
+runtime read. Static evidence comes from the same cached `cfunc.mba` at
+`MMAT_LVARS`, where `mop_l.l.idx` identifies the exact lvar.
 
-## Hex-Rays Enumeration
+The debugger PC denotes the next instruction to execute. A definition at the
+current EA has not happened yet. If one native instruction maps to several
+contiguous top-level microinstructions, the pre-instruction boundary is the
+first of that run. Mappings split across blocks or non-contiguous runs remain
+unavailable.
 
-When a `pc_update` maps to an IDA EA, the plugin:
+The recovery layer now separates two questions:
 
-1. Uses `ida_funcs.get_func(ida_ea)` to find the current function.
-2. Uses `ida_hexrays.init_hexrays_plugin()` when available.
-3. Uses `ida_hexrays.decompile(function_start_ea)`.
-4. Iterates `cfunc.lvars`.
-5. Reads lvar metadata such as name, `tif`, `width`, `is_arg_var()`,
-   `cfunc.argidx`, prototype argument names, location, and function start EA.
+1. Which whole-lvar definition reaches the current pre-instruction point?
+2. Is there any reachable future use of that value before a redefinition?
 
-Argument detection intentionally uses more than one signal because
-`lvar.is_arg_var()` is not reliable for every IDA 9.3 decompilation. The
-current fallback order is:
+The first query scans the current microblock prefix backward and then follows
+`mblock_t.pred()` edges. Each path stops at its nearest whole definition.
+Exactly one effective `(block, instruction)` definition must cover every path;
+different predecessor definitions, an undefined path, partial/overlapping
+definitions, malformed CFG edges, or unresolved loop state remain unavailable.
+A later definition in a successor or unrelated block does not invalidate the
+current point because it does not reach it.
 
-- `cfunc.argidx`, when Hex-Rays exposes argument lvar indexes.
-- `lvar.is_arg_var()`, when it is set.
-- Function prototype / decompiled prototype argument names.
-- Known Windows x64 entry ABI locations such as `rcx`, `rdx`/`edx`, `r8`,
-  `r9`, and stack locations like `^B0`, `^B8`, `^C0`.
+The second query scans the current suffix and then `mblock_t.succ()` edges. A
+use before redefinition on any reachable path proves liveness; not every future
+path must use the value. A redefinition kills only that path. Traversal uses
+bounded block/program-point states, including a distinct full-block state when
+a loop revisits the current block.
 
-Stack notation is used only to recover argument order. Runtime stack reads
-still use the ABI formula:
+## Register-Backed Local/`v*`
+
+The structural location must be exactly one `lvar.is_reg1()` x64 GPR:
 
 ```text
-arg4 -> [rsp + 0x28]
-arg5 -> [rsp + 0x30]
-arg6 -> [rsp + 0x38]
+rax rbx rcx rdx rsi rdi rbp rsp r8-r15
 ```
 
-Locals and generated `v*` temporaries are displayed but not used for runtime
-requests.
+The 8/16/32-bit aliases are supported, including `al`/`ah`, `sil`, and
+`r8b`/`r8w`/`r8d` through `r15`. The recovery layer uses `get_reg1()`,
+`get_mreg_name()`, and `mreg2reg()`; it does not parse the printed location as
+evidence.
 
-If Hex-Rays is unavailable or decompilation fails, PC sync still works:
-`ida_pc_mapped` is sent and IDA jumps to the mapped EA, but no variable rows are
-updated from guessed data.
-
-## Fresh and Stale Transitions
-
-When a `pc_update` maps exactly to the function start EA, supported arguments
-are requested and successful responses update rows to:
+The defining native instruction must write the same physical register. A
+separate native `ida_gdl.FlowChart` proof scans backward from the exact current
+instruction along every predecessor path to the selected definition. Any
+intervening overlapping subregister write, call, decode uncertainty, or path
+that does not reach the definition rejects the candidate. IDA requests the
+full register from WinDbg, then shifts a high-byte alias when needed and masks
+to the lvar width. On x64, a 32-bit GPR write is modeled as zero-extending the
+full register, so a proven `mov r12d, ...` is recovered by reading full `r12`
+and extracting its low 32 bits:
 
 ```text
 status = fresh
-confidence = exact_entry
+confidence = exact_register_location
 ```
 
-When a later `pc_update` maps inside the same function but not to the function
-entry, prior entry argument values are preserved only as:
+## Stack-Backed Local/`v*`
+
+A stack candidate must be structural, non-scattered, non-aliased, live by the
+same reaching-definition proof, and exactly 1, 2, 4, or 8 bytes. This milestone
+still requires its definition and current PC to share one native basic block.
+IDA function SP analysis must be complete and must not have `FUNC_FUZZY_SP`.
+
+The layer converts the decompiler offset with `mba.stkoff_vd2ida()`. With the
+pre-instruction `spd = ida_frame.get_spd(func, current_ea)`, it derives a
+current-RSP-relative offset using the frame return-address offset. Only then
+does it request full `rsp`, resolve a concrete runtime address, and send an
+exact-width `mem_request`. Bytes are decoded little-endian.
+
+The defining native instruction must write the same IDA frame interval, and
+no intervening register-relative write may overlap or ambiguously alias it.
+
+On success:
+
+```text
+status = fresh
+confidence = exact_stack_location
+```
+
+If SP/frame state or offset conversion is uncertain, no memory request is sent
+and the reason is `unresolved_stack_location`.
+
+## Exact Constant
+
+A direct whole-lvar `m_mov` from `mop_n` can be used without a debugger read
+when it is the live reaching definition. Ctree `cot_var`, assignment, and
+number facts are collected as a supporting cross-check. The value is masked to
+the lvar width:
+
+```text
+status = fresh
+confidence = exact_constant
+```
+
+If Hex-Rays folds the microcode source to a number but the structural lvar is
+register-backed and the defining native instruction obtains the value from a
+register (for example `mov r12d, esi`), the exact physical-register proof takes
+precedence. A genuine native immediate definition may still use the no-read
+constant class.
+
+## Unsupported and Ambiguous Cases
+
+No value is guessed for:
+
+- A printed register with no liveness/reaching-definition proof.
+- Expression-only or optimized-away variables.
+- Multiple, partial, overlapping, undefined-path, or synthetic-only
+  definitions.
+- Cross-block register paths with an unresolved native CFG, decode gap, call,
+  clobber, or unsupported loop state.
+- Cross-block stack definitions.
+- Scattered, multi-register, XMM/vector, or FPU locations.
+- Shared/overlapped variables and address-taken/aliased stack locals.
+- Register locations across an unknown write, call, or instruction flow.
+- Stack locations with missing/fuzzy SP state.
+- Inlined-variable ambiguity.
+
+Common reasons are:
+
+```text
+not_live_at_current_pc
+ambiguous_reaching_definition
+cross_block_liveness_unproven
+storage_clobbered_before_current_pc
+unresolved_native_program_point
+ambiguous_register_location
+unsupported_scattered_location
+unresolved_stack_location
+no_reaching_definition
+microcode_unavailable
+```
+
+An unsupported row remains visible as unavailable. If it had a previous exact
+success and current proof disappears, that value may remain only as:
 
 ```text
 status = stale
-confidence = stale_entry_value
+confidence = stale_runtime_value
 ```
 
-If there is no previous entry snapshot for that function, supported arguments
-remain `unavailable/unknown`. Unsupported locals and `v*` temporaries remain
-`unavailable/unsupported_variable` in all of these cases.
+## Enumeration and Failure Isolation
+
+For each mapped EA, the plugin:
+
+1. Uses `ida_funcs.get_func()` and `ida_hexrays.decompile()`.
+2. Enumerates `cfunc.lvars` and records stable lvar indexes.
+3. Detects arguments through `cfunc.argidx`, `is_arg_var()`, prototype names,
+   and the existing Windows x64 ABI-location fallback.
+4. Runs the unchanged entry-argument planner.
+5. Runs local/`v*` ctree, microcode, and instruction analysis independently.
+
+If decompilation fails, `ida_pc_mapped` and the IDA jump have already happened.
+If only recovery analysis fails, affected local rows become
+`unavailable/unknown` with `microcode_unavailable`; PC synchronization,
+arguments, stepping, socket processing, and the table continue.
+
+## Correlation and Invalidation
+
+Argument requests keep their existing IDs. Local recovery owns reserved IDs:
+
+```text
+v-reg-<pc_seq>-runtime
+v-mem-<pc_seq>-<lvar_index>
+```
+
+A new PC clears every prior v pending request. A response is accepted only for
+the current `pc_seq`, optional `runtime_pc`, request ID, and response kind.
+Memory replies must also match the planned address and size. An old response
+therefore cannot turn a stale/unavailable row fresh.
 
 ## Live Variables View
 
-The first UI is a table with:
+The existing columns remain and recovery metadata is appended:
 
 ```text
-Name | Kind | ArgIndex | Size | Location | Value | Status | Confidence | Reason
+Name | Kind | ArgIndex | Size | Location | Value | Status | Confidence | Reason |
+LvarIndex | Type | Source EA | Storage | Last Update PC
 ```
 
-Pseudocode overlays are a later feature after the variable model is stable.
+Pseudocode overlays remain out of scope.

@@ -44,6 +44,9 @@ PC/register/memory flow.
 The fake IDA client does not use real IDA APIs or Hex-Rays APIs. It tests JSONL
 framing, registration, routing, and `pc_seq` / `request_id` preservation.
 
-Future sample programs will validate Windows x64 arguments, entry snapshots,
-stale values after stepping, explicit memory watches, and unsupported
-Hex-Rays temporaries such as `v1`, `v2`, and `v160`.
+Additional sample programs can extend coverage for Windows x64 entry snapshots,
+explicit memory watches, and more complex unsupported Hex-Rays temporaries.
+
+`vvar_probe/` now provides deterministic x64 definition/live/reuse landmarks,
+plus C `noinline` local probes, for manual register, stack, constant, and stale
+runtime-recovery validation.

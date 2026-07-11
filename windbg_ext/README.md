@@ -1,7 +1,8 @@
 # WinDbg Extension
 
-The WinDbg extension implements the first C-first commands for broker
-connection and PC synchronization.
+The WinDbg extension implements the v0.1.0-research C-first commands for
+broker connection, PC synchronization, runtime register/memory reads, and
+asynchronous stepping.
 
 Implemented commands:
 
@@ -145,7 +146,8 @@ and `runtime_pc`.
 
 Current limitations:
 
-- No Hex-Rays `v*` variable recovery yet.
+- No Hex-Rays `v*` variable interpretation in the WinDbg extension. IDA owns
+  the current best-effort local recovery layer.
 - No decompiler semantics in the WinDbg extension.
 
 The extension must stay low-level. It must not parse Hex-Rays variables, infer

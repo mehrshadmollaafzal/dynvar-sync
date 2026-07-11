@@ -87,6 +87,28 @@ def make_reg_response(reg_request: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def make_mem_response(mem_request: dict[str, Any]) -> dict[str, Any]:
+    """Build a deterministic fake memory response."""
+    payload = mem_request["payload"]
+    size = int(payload["size"])
+    pattern = bytes.fromhex("8877665544332211")
+    data = (pattern * ((size + len(pattern) - 1) // len(pattern)))[:size]
+    return protocol.make_envelope(
+        protocol.TYPE_MEM_RESPONSE,
+        protocol.ROLE_WINDBG,
+        {
+            "pc_seq": payload["pc_seq"],
+            "request_id": payload["request_id"],
+            "runtime_pc": payload["runtime_pc"],
+            "ok": True,
+            "address": payload["address"],
+            "size": size,
+            "bytes_hex": data.hex(),
+        },
+        message_id=102,
+    )
+
+
 def run(host: str, port: int) -> int:
     """Connect to the broker and perform the fake WinDbg side of the test."""
     with socket.create_connection((host, port)) as sock:
@@ -101,6 +123,8 @@ def run(host: str, port: int) -> int:
                 sent_pc = True
             elif message.get("type") == protocol.TYPE_REG_REQUEST:
                 send_message(sock, make_reg_response(message))
+            elif message.get("type") == protocol.TYPE_MEM_REQUEST:
+                send_message(sock, make_mem_response(message))
                 return 0
 
     return 0
