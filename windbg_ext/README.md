@@ -1,7 +1,8 @@
 # WinDbg Extension
 
-The WinDbg extension implements the first C-first commands for broker
-connection and PC synchronization.
+The WinDbg extension implements the v0.1.0-research C-first commands for
+broker connection, PC synchronization, runtime register/memory reads, and
+asynchronous stepping.
 
 Implemented commands:
 

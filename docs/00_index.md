@@ -11,5 +11,9 @@ documentation for the implementation tree.
 - `06_testing.md` - Validation strategy and early test scenarios.
 - `07_research_prototype_status.md` - Measured support matrix and closure
   baseline for the research prototype.
+- `08_release_checklist.md` - v0.1.0-research maintainer sign-off checklist.
+- `09_installation.md` - Clean-checkout installation and connection guide.
+- `10_quick_start_validation.md` - User-mode and kernel-mode smoke tests.
+- `release_notes_v0.1.0_research.md` - Concise v0.1.0-research release notes.
 
 The original `ForCodex/` planning folder is intentionally retained unchanged.

@@ -1,11 +1,9 @@
-# dynvar-sync-version2
+# DayVarSync v0.1.0-research
 
-`dynvar-sync-version2` is the current DayVarSync research prototype: a
-best-effort, confidence-aware synchronization system between IDA Pro 9.3 and
-WinDbg Preview for Windows x64 targets. It synchronizes the debugger's runtime
-PC with IDA and displays confidence-tagged runtime values for supported
-Hex-Rays variables. It is not a source-level debugger and does not guarantee
-recovery of every Hex-Rays lvar.
+DayVarSync v0.1.0-research is a best-effort, confidence-aware research
+prototype that synchronizes WinDbg runtime state with IDA Pro and recovers only
+Hex-Rays variables whose runtime values can be structurally proven. It is not a
+source-level debugger and does not guarantee recovery of every Hex-Rays lvar.
 
 Current status: broker routing, WinDbg DbgEng-derived PC/register/memory
 responses, and a real IDA-side plugin for the current auto-live flow. The IDA
@@ -29,6 +27,16 @@ requires the physical x64 GPR to survive every native CFG path to the current
 PC. Stack and constant support retain their narrower conservative constraints.
 Printed `lvar.location` text alone never authorizes a read.
 
+## Release Documents
+
+- Version: `VERSION`
+- Changelog: `CHANGELOG.md`
+- Installation: `docs/09_installation.md`
+- Quick-start validation: `docs/10_quick_start_validation.md`
+- Support matrix and limitations: `docs/07_research_prototype_status.md`
+- Release checklist: `docs/08_release_checklist.md`
+- Release notes: `docs/release_notes_v0.1.0_research.md`
+
 ## Architecture
 
 ```text
@@ -50,7 +58,7 @@ ida_plugin/  IDAPython plugin for arguments and conservative local recovery
 windbg_ext/  C-first WinDbg extension skeleton
 samples/     Fake clients, unit tests, and the deterministic vvar probe
 docs/        Adapted architecture and implementation docs
-tools/       Future helper scripts and build tools
+tools/       Reserved helper-script area; no required release scripts yet
 ForCodex/    Original planning pack, retained unchanged
 ```
 
@@ -268,38 +276,12 @@ For the measured support matrix and closure baseline, see
 For manual IDA/WinDbg transitions, build and follow
 `samples/vvar_probe/README.md`.
 
-## MVP Goal
+## v0.1.0-research Completion Boundary
 
-The first useful version should support PC synchronization and reliable runtime
-values for Windows x64 function arguments at exact function entry:
-
-```text
-arg0 -> rcx
-arg1 -> rdx
-arg2 -> r8
-arg3 -> r9
-arg4+ -> [rsp + stack offset]
-```
-
-Values must be tagged as fresh, stale, unavailable, or error. Responses
-must be correlated with `pc_seq` so old debugger replies cannot update a newer
-IDA view as fresh.
-
-## Long-Term Goal
-
-The more important long-term goal is live runtime recovery and display of
-Hex-Rays decompiler variables, especially generated variables such as:
-
-```text
-v1
-v2
-v160
-```
-
-Those variables are often temporaries, optimized-away values, or expressions
-rather than stable storage locations. The current milestone recovers only the
-proven subset above; broader CFG liveness and reaching-definition analysis are
-future work.
+This release completes the transport and synchronization prototype, exact-entry
+argument recovery for the documented Windows x64 scope, and best-effort
+supported scalar lvar recovery. Unsupported cases fail closed. Full Hex-Rays
+lvar recovery is out of scope for v0.1.0-research.
 
 ## Correctness Rule
 

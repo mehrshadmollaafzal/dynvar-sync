@@ -11,12 +11,20 @@ Core rule:
 Unavailable is better than wrong.
 ```
 
-Every row is one of:
+The internal protocol/status fields remain compact, while the UI may present
+clearer labels. Every row is one of:
 
-- `fresh` - proven for the current PC and `pc_seq`.
-- `stale` - previously proven, but not valid as a fresh current value.
+- `fresh` - an exact current value proven for the current PC and `pc_seq`.
+- `stale` - stale / last observed; previously exact, but not valid as an exact
+  current value.
 - `unavailable` - no reliable current value exists.
 - `error` - a proven runtime read was attempted and failed.
+
+User-facing unavailable reasons include `not yet defined`, `ambiguous`,
+`unsupported storage`, `address taken / alias unknown`, and
+`optimized away / not materialized`. The UI uses those labels only when the
+current analysis reason supports the distinction; otherwise the row remains
+plain `unavailable`.
 
 ## Existing Argument Baseline
 

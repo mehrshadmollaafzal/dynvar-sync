@@ -1,7 +1,9 @@
 # Broker
 
-Phase 1 implements a small JSONL-over-TCP broker for fake IDA and fake WinDbg
-clients.
+The v0.1.0-research broker is a small JSONL-over-TCP router for one active IDA
+client and one active WinDbg client. It validates protocol envelopes, registers
+roles, and routes runtime messages. It does not interpret Hex-Rays variables or
+debugger state.
 
 Run it with:
 
@@ -17,9 +19,9 @@ The broker:
 - Replaces an existing client when another client registers the same role.
 - Preserves partial JSONL lines and handles multiple messages in one receive.
 - Logs malformed JSON and invalid protocol envelopes without crashing.
-- Routes Phase 1 runtime messages between fake clients.
+- Routes runtime messages between IDA and WinDbg clients.
 
-Supported Phase 1 routes:
+Supported routes:
 
 ```text
 pc_update        windbg -> ida

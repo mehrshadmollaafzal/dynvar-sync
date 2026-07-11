@@ -448,7 +448,7 @@ Expected after stepping:
 - Unsupported locals remain unavailable, and prior successful locals may be
   visible only as `stale/stale_runtime_value` when proof disappears.
 
-## Future WinDbg Smoke Tests
+## WinDbg Smoke Tests
 
 Manual command path:
 
