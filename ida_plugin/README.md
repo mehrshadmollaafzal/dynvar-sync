@@ -10,6 +10,7 @@ Responsibilities:
 - Jump IDA to the mapped EA.
 - Enumerate Hex-Rays local variables and arguments.
 - Build an exact-entry Windows x64 argument request plan.
+- Rebuild a conservative non-argument lvar recovery plan at every mapped PC.
 - Request only low-level register and memory reads from WinDbg.
 - Display variables and runtime values in the Live Variables table.
 - Mark late or outdated values as stale or unavailable.
@@ -50,12 +51,70 @@ function start EA
 ```
 
 Both argument-looking `a*` variables and generated `v*` variables are listed.
-`v*` locals/temporaries are not guessed. They appear as:
+Argument handling remains in `dynvar_core.py`; `v_variable_recovery.py` owns a
+separate evidence model, history, and `v-reg-*`/`v-mem-*` request namespace.
+The recovery layer records lvar index, type/width, printed location, function
+and current EAs, candidate storage, source definition EA, status/confidence,
+and last successful value/`pc_seq` for every non-argument lvar.
+
+## First Supported Local/`v*` Subset
+
+Recovery uses the already-decompiled `cfunc.mba` at `MMAT_LVARS`, where
+`mop_l.l.idx` identifies the exact Hex-Rays lvar. At the debugger's
+pre-instruction PC, candidate-specific dataflow follows `mblock_t` predecessor
+edges to find whole definitions and accepts only one effective definition
+covering every path. Future-use discovery is a separate successor traversal:
+one use before redefinition is sufficient, including a use in another block.
+Partial/overlapping definitions, undefined paths, ambiguous predecessor
+definitions, malformed CFGs, and unresolved loops remain unavailable. Ctree
+variable/constant facts remain only supporting checks.
+
+Supported classes are:
+
+- One physical x64 GPR location: `rax` through `r15`, including supported
+  8/16/32-bit aliases. IDA must structurally report `is_reg1()`; printed text
+  alone is ignored. The plugin requests the full register and masks/shifts the
+  value to the proven lvar width. A separate native `ida_gdl.FlowChart` walk
+  verifies that every path from the selected definition to the current PC is
+  free of calls, decode gaps, and overlapping physical-register writes. x64
+  32-bit writes zero-extend, so an `r12d` definition reads full `r12` and masks
+  its low 32 bits. Result:
+
+  ```text
+  fresh / exact_register_location
+  ```
+
+- One structural, non-aliased stack lvar of exactly 1, 2, 4, or 8 bytes. IDA
+  SP analysis must be complete and non-fuzzy. The plugin converts the
+  decompiler stack offset to a current-RSP-relative offset, requests `rsp`,
+  then reads exactly the lvar width and decodes it little-endian. Result:
+
+  ```text
+  fresh / exact_stack_location
+  ```
+
+- A direct whole-lvar `m_mov` from `mop_n` that is the live reaching
+  definition. It is rendered without a debugger read when the native
+  definition is also immediate (or no exact physical register is present).
+  A structural register location with a non-immediate native definition uses
+  the register proof instead, even if Hex-Rays folded its microcode source to
+  a number. Result:
+
+  ```text
+  fresh / exact_constant
+  ```
+
+If current proof disappears after a successful read, the previous value is
+preserved only as:
 
 ```text
-status = unavailable
-confidence = unsupported_variable
+status = stale
+confidence = stale_runtime_value
 ```
+
+No response can update a row unless `pc_seq`, optional `runtime_pc`,
+`request_id`, response kind, and (for memory) expected address/size match the
+current v-recovery plan.
 
 At exact function entry only, the plugin maps Windows x64 arguments:
 
@@ -75,8 +134,9 @@ needed stack argument.
 If the mapped PC is not the function start EA, old entry values are preserved
 only as `stale`; otherwise argument rows remain `unavailable`.
 
-Responses are accepted only when they match the current `pc_seq` and an
-outstanding `request_id`.
+Argument responses continue to use their existing IDs and behavior. V-recovery
+responses are routed only to their reserved `v-` IDs, so recovery cannot clear
+or consume an entry-argument request.
 
 Value display is normalized in the Live Variables table:
 
@@ -84,6 +144,8 @@ Value display is normalized in the Live Variables table:
 - Stack argument memory reads decode 1, 2, 4, or 8 bytes as little-endian
   numeric hex.
 - Raw memory bytes are kept in the row reason for stack reads.
+- The existing table columns remain, with `LvarIndex`, `Type`, `Source EA`,
+  `Storage`, and `Last Update PC` appended.
 
 ## Manual Test
 
@@ -110,7 +172,7 @@ In WinDbg:
 !dvs_step p 1
 ```
 
-Expected broker flow for each `!dvs_pc`:
+Expected baseline broker flow at an argument-bearing function entry:
 
 ```text
 pc_update
@@ -121,6 +183,10 @@ mem_request
 mem_response
 ```
 
+Proven locals may add one `v-reg-*` request/response and exact-width
+`v-mem-*` requests. Away from entry, those local requests may occur even when
+the argument planner correctly sends no entry request.
+
 Expected IDA behavior:
 
 - IDA jumps to the mapped EA.
@@ -128,17 +194,28 @@ Expected IDA behavior:
 - Supported entry arguments show `fresh/exact_entry`.
 - After stepping away from entry in the same function, preserved entry values
   become `stale/stale_entry_value`.
-- Unsupported `v*` variables show `unavailable/unsupported_variable`.
+- A proven local may become fresh with one of the three exact recovery
+  confidences above.
+- Unsupported/ambiguous locals remain unavailable with a concrete reason, or
+  retain only a stale last-success value.
+- IDA output includes `v-candidate`, `v-recovery`, and `v-request` diagnostics.
+- CFG diagnostics include `v-cfg-point`, `v-reaching-def`,
+  `v-cross-block-live`, and `v-storage-valid` before the final recovery and
+  request lines.
 
 ## Limitations
 
-The IDA plugin must not guess unsupported Hex-Rays temporaries. Arbitrary
-`v*` variables are especially important long-term, but unsupported values must
-remain unavailable instead of being invented.
+The IDA plugin still does not promise universal local recovery. Supported
+cross-block work is limited to a unique whole-lvar reaching definition plus a
+provably unchanged x64 GPR. Unsupported cases include ambiguous/undefined
+reaching paths, partial or overlapping definitions, native decode gaps,
+register clobbers or calls, unsupported loop states, cross-block stack
+definitions, scattered or multi-register locations, XMM/vector/FPU locations,
+aliased or address-taken stack locals, fuzzy SP state, inlined-variable
+ambiguity, and expression-only/optimized-away values. These remain unavailable
+rather than being inferred from printed locations.
 
-Not implemented yet:
-
-- Real `v*` runtime recovery.
-- Microcode analysis.
-- Complex register lifetime tracking.
-- Pseudocode overlays.
+If decompilation, ctree traversal, microcode access, or instruction/SP analysis
+fails, the plugin logs the failure and leaves affected local rows unavailable.
+PC mapping/jump, stepping, argument planning, the socket loop, and the Live
+Variables view continue operating. Pseudocode overlays are not implemented.

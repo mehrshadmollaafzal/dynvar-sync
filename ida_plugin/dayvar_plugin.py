@@ -1,8 +1,8 @@
 """IDA plugin entry point for DayVar Sync.
 
 This module implements the IDA-side broker connection, Hex-Rays lvar
-enumeration, exact-entry argument reads, and the Live Variables table
-foundation. Pseudocode overlays are intentionally not implemented here.
+enumeration, exact-entry argument reads, conservative local recovery, and the
+Live Variables table. Pseudocode overlays are intentionally not implemented.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from dynvar_core import DayVarCore
 from hexrays_variables import enumerate_hexrays_variables
 from live_variables_view import LiveVariablesView
 from protocol_client import ProtocolClient
+from v_variable_recovery import VVariableRecovery
 
 DEFAULT_HOST = "172.28.70.90"
 DEFAULT_PORT = 9100
@@ -55,6 +56,7 @@ class DayVarController:
 
     def __init__(self) -> None:
         self.core = DayVarCore()
+        self.v_recovery = VVariableRecovery()
         self.view = LiveVariablesView()
         self.client: ProtocolClient | None = None
         self.messages: queue.Queue[dict[str, Any]] = queue.Queue()
@@ -182,6 +184,18 @@ class DayVarController:
         except (KeyError, ValueError) as exc:
             self.view.log(f"pc_update mapping failed: {exc}")
             pc_seq = int(payload.get("pc_seq", 0) or 0)
+            # A failed mapping is still a newer debugger PC context. Drop all
+            # prior argument/v pending requests before reporting the failure
+            # so a late response cannot refresh the previous mapped PC.
+            self.core.start_pc_context(
+                pc_seq=pc_seq,
+                runtime_pc=runtime_pc,
+                ida_ea="",
+            )
+            self.v_recovery.invalidate_pc(
+                pc_seq=pc_seq,
+                runtime_pc=runtime_pc,
+            )
             self._send(
                 self.core.make_ida_pc_mapped(
                     pc_seq=pc_seq,
@@ -209,6 +223,10 @@ class DayVarController:
         )
         self.view.show_mapping(mapped["payload"])
         self._send(mapped)
+        self.v_recovery.invalidate_pc(
+            pc_seq=mapping.pc_seq,
+            runtime_pc=runtime_pc_text,
+        )
 
         enumeration = enumerate_hexrays_variables(mapping.ida_ea, current_pc=runtime_pc_text)
         if not enumeration.ok:
@@ -218,6 +236,10 @@ class DayVarController:
                 ida_ea=ida_ea_text,
                 function_ea=enumeration.function_ea,
                 at_function_entry=False,
+            )
+            self.v_recovery.invalidate_pc(
+                pc_seq=mapping.pc_seq,
+                runtime_pc=runtime_pc_text,
             )
             self.view.update_rows([])
             self.view.log(enumeration.error)
@@ -241,28 +263,94 @@ class DayVarController:
         )
         for line in plan.debug_lines:
             self.view.log(line)
-        self.view.update_rows(self.core.rows)
+        self._publish_rows()
         if plan.register_request is not None:
             self._send(plan.register_request)
 
+        try:
+            v_plan = self.v_recovery.begin_pc(
+                variables=enumeration.variables,
+                function_ea=int(enumeration.function_start_ea),
+                current_ea=mapping.ida_ea,
+                runtime_pc=runtime_pc_text,
+                pc_seq=mapping.pc_seq,
+                envelope=self.core.envelope,
+                cfunc=enumeration.cfunc,
+            )
+        except Exception as exc:
+            # Recovery is best-effort. Entry arguments, mapped PC state, and
+            # the network loop must remain usable after any Hex-Rays failure.
+            self.v_recovery.invalidate_pc(
+                pc_seq=mapping.pc_seq,
+                runtime_pc=runtime_pc_text,
+            )
+            self.view.log(f"v-microcode failure reason={exc}")
+            self._publish_rows()
+            return
+
+        for line in v_plan.debug_lines:
+            self.view.log(line)
+        self._publish_rows()
+        if v_plan.register_request is not None:
+            self._send(v_plan.register_request)
+
     def _handle_reg_response(self, payload: dict[str, Any]) -> None:
+        if self.v_recovery.is_v_request_id(payload.get("request_id")):
+            try:
+                accepted, reason, mem_requests, debug_lines = self.v_recovery.apply_reg_response(
+                    payload,
+                    envelope=self.core.envelope,
+                )
+            except Exception as exc:
+                self.view.log(f"ignored v reg_response after recovery failure: {exc}")
+                return
+            if not accepted:
+                self.view.log(f"ignored v reg_response: {reason}")
+                return
+            self.view.show_reg_response(payload)
+            for line in debug_lines:
+                self.view.log(line)
+            self._publish_rows()
+            for mem_request in mem_requests:
+                self._send(mem_request)
+            return
+
         accepted, reason, mem_requests = self.core.apply_reg_response(payload)
         if not accepted:
             self.view.log(f"ignored reg_response: {reason}")
             return
 
         self.view.show_reg_response(payload)
-        self.view.update_rows(self.core.rows)
+        self._publish_rows()
         for mem_request in mem_requests:
             self._send(mem_request)
 
     def _handle_mem_response(self, payload: dict[str, Any]) -> None:
+        if self.v_recovery.is_v_request_id(payload.get("request_id")):
+            try:
+                accepted, reason, debug_lines = self.v_recovery.apply_mem_response(payload)
+            except Exception as exc:
+                self.view.log(f"ignored v mem_response after recovery failure: {exc}")
+                return
+            if not accepted:
+                self.view.log(f"ignored v mem_response: {reason}")
+                return
+            self.view.show_mem_response(payload)
+            for line in debug_lines:
+                self.view.log(line)
+            self._publish_rows()
+            return
+
         accepted, reason = self.core.apply_mem_response(payload)
         if not accepted:
             self.view.log(f"ignored mem_response: {reason}")
             return
         self.view.show_mem_response(payload)
-        self.view.update_rows(self.core.rows)
+        self._publish_rows()
+
+    def _publish_rows(self) -> None:
+        """Refresh the table with v recovery overlaid on argument-owned rows."""
+        self.view.update_rows(self.v_recovery.overlay_rows(self.core.rows))
 
     def _get_imagebase(self) -> int:
         if idaapi is None:
@@ -352,7 +440,7 @@ def uninstall_plugin() -> None:
 
 def plugin_status() -> str:
     """Return the current implementation status."""
-    return "ida plugin: Hex-Rays enumeration and exact-entry argument reads implemented"
+    return "ida plugin: entry arguments and conservative local recovery implemented"
 
 
 if ida_idaapi is not None:

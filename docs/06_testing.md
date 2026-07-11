@@ -239,6 +239,9 @@ Expected IDA output log:
 [DayVarSync] reg_response pc_seq=<n> request_id=reg-<n>-entry ok=True
 [DayVarSync] send type=mem_request id=<n>
 [DayVarSync] mem_response pc_seq=<n> request_id=mem-<n>-<name> ok=True ...
+[DayVarSync] v-candidate name=v6 index=<n> location=r8d current_ea=<ea>
+[DayVarSync] v-recovery name=v6 result=<status> source=<storage> reason=<reason>
+[DayVarSync] v-request pc_seq=<n> registers=[...] memory=[...]
 ```
 
 The plugin computes:
@@ -262,18 +265,142 @@ Expected Live Variables behavior:
 - Register values are displayed as canonical `0x...` hex.
 - Stack argument memory bytes are decoded little-endian for 1/2/4/8-byte
   values and keep raw bytes in the row reason.
-- Unsupported `v*` variables are listed as
-  `unavailable/unsupported_variable`.
+- Proven register, stack, or constant locals can become fresh with
+  `exact_register_location`, `exact_stack_location`, or `exact_constant`.
+- Every other local remains unavailable with a concrete conservative reason;
+  a previous exact value can remain only `stale/stale_runtime_value`.
+- `LvarIndex`, `Type`, `Source EA`, `Storage`, and `Last Update PC` are
+  populated for recovered rows.
 
 Current real IDA plugin limitations:
 
 - Argument runtime values are exact only at function entry.
 - Stack arguments read 1/2/4/8 bytes when Hex-Rays reports a safe size;
   other sizes fall back to an 8-byte slot read.
-- No real `v*` recovery.
-- No microcode analysis.
-- No complex register lifetime tracking.
+- Register recovery permits one effective whole-lvar definition from the
+  current or predecessor microblock and a use in a reachable successor block.
+- Ambiguous/undefined/partial reaching paths, unresolved loops, native calls
+  or register clobbers, scattered/shared/aliased locations, vector registers,
+  cross-block stack definitions, and fuzzy stack state remain unsupported.
 - No pseudocode overlays.
+
+## Outside-IDA Unit Tests
+
+Run the stdlib-only regression suite from the repository root:
+
+```bash
+python3 -m unittest -v \
+  samples.test_dynvar_core \
+  samples.test_v_variable_recovery \
+  samples.test_v_variable_cfg
+```
+
+The tests cover the unchanged entry-argument register/stack behavior and stale
+transition, old-`pc_seq` rejection, x64 subregister normalization/masking,
+little-endian exact-width decoding, register/stack/constant v plan state,
+fresh-to-stale history, concrete stack requests, and isolated microcode
+failure. Synthetic CFG coverage includes current/predecessor definitions,
+successor uses, ambiguous predecessors, killed definitions, overlapping
+definitions, diamonds, undefined paths, native register clobbers, exact
+pre-instruction semantics, and bounded forward/backward loops. They do not
+replace real IDA tests because SWIG ctree/microcode and processor-module
+register-access APIs are available only inside IDA.
+
+## PsOpenProcess Cross-Block Register Test
+
+This live test requires IDA 9.3 and WinDbg and cannot be completed by the
+outside-IDA suite. Break and synchronize at the pre-instruction PC:
+
+```text
+nt!PsOpenProcess+...:
+0x1406D3495  xor esi, esi
+0x1406D3498  mov r12d, esi
+0x1406D349B  mov [rsp+4Ch], esi  ; current PC
+```
+
+For Hex-Rays lvar index 10, name `v10`, structural location `r12d`, expected
+analysis/request diagnostics are:
+
+```text
+v-cfg-point name=v10 current_block=<current_block> current_instruction=<index> current_ea=0x1406d349b
+v-reaching-def name=v10 def_ea=0x1406d3498 def_block=<def_block> current_ea=0x1406d349b current_block=<current_block> count=1 undefined_paths=0 overlap=0 loop=0 exhausted=0
+v-cross-block-live name=v10 result=cross_block_use use_ea=<use_ea> use_block=<use_block> redefinitions=<n> loop=<0|1> exhausted=0
+v-storage-valid name=v10 storage=r12d result=valid reason=exact register storage survives to current PC clobber_ea=none blocks=<n>
+v-recovery name=v10 result=pending source=register:r12d reason=waiting for register r12
+v-request pc_seq=<pc_seq> registers=['r12'] memory=[]
+```
+
+After the matching `reg_response` returns full `r12 = 0`, the row must show:
+
+```text
+Value      = 0x0
+Status     = fresh
+Confidence = exact_register_location
+Storage    = r12d
+Source EA  = 0x1406d3498
+```
+
+The exact microblock serials, use EA, and path counts are database-dependent
+and must be taken from the live diagnostic lines. Do not treat this scenario
+as passed until it is verified in the real IDA/WinDbg session.
+
+## vvar Probe Manual Recovery Test
+
+Build and use `samples/vvar_probe/` as described in its README. Its MASM
+functions export instruction-accurate symbols for definitions, retained uses,
+and register reuse. Hex-Rays may propagate a simple machine temporary away, so
+identify test rows by function EA, lvar index, Source EA, and Storage rather
+than assuming a generated name.
+
+For the register path:
+
+```text
+bp vvar_probe!vvar_register_before_def
+g
+!dvs_pc
+!dvs_step p 1
+```
+
+Expected:
+
+- Before the `lea r8d, [rcx+2]`, no r8 value is copied into the local row.
+- At `vvar_register_live`, a structurally mapped and live row may request full
+  `r8`, mask it to 32 bits, and become
+  `0x42/fresh/exact_register_location`.
+- After `vvar_register_before_reuse` executes, the original value must never
+  remain fresh; if preserved, it is `stale/stale_runtime_value`.
+
+Repeat from `vvar_stack_before_def`. At `vvar_stack_live`, a supported row must
+request `rsp`, resolve the concrete address using IDA SP/frame state, request
+exactly 8 bytes, decode little-endian, and become
+`0x8877665544332211/fresh/exact_stack_location`.
+
+Repeat from `vvar_constant_before_def`. At `vvar_constant_live`, a retained
+whole `m_mov mop_n -> mop_l` definition may produce
+`0x2/fresh/exact_constant` without any debugger read for that candidate.
+
+Negative checks:
+
+- A row whose printed location says `r8` but lacks the proof remains
+  unavailable.
+- Scattered, ambiguous/undefined cross-block, cross-block stack, and
+  unresolved-stack rows send no value read. A unique, storage-valid
+  cross-block register candidate may send one full-register request.
+- Trigger a newer PC update before an older v response arrives. IDA must log
+  `stale pc_seq` and must not change the newer row to fresh.
+- Temporarily force decompilation/microcode failure (or test a function Hex-Rays
+  cannot decompile). PC mapping, arguments, stepping, socket processing, and
+  the table must continue; affected local rows use `microcode_unavailable`.
+
+Manual milestone sign-off is not complete until the same session also proves:
+
+- Existing entry arguments still become `fresh/exact_entry` unchanged.
+- Stepping away still makes captured arguments `stale/stale_entry_value`.
+- At least one real non-argument row becomes fresh through the register, stack,
+  or constant class.
+- An ambiguous row remains unavailable even when its printed location names a
+  register.
+- An old-`pc_seq` response is rejected and never becomes fresh.
 
 ## Step Stale-State Test
 
@@ -309,9 +436,10 @@ Expected after stepping:
 - IDA jumps to the new EA.
 - If the new EA is inside the same function but not entry, old argument values
   remain visible as `stale/stale_entry_value`.
-- Broker should show only `pc_update` and `ida_pc_mapped` unless the new PC is
-  exactly the function entry again.
-- Unsupported `v*` variables remain `unavailable/unsupported_variable`.
+- No new entry-argument request is sent away from entry. Separate `v-reg-*` or
+  `v-mem-*` requests are allowed only for currently proven local candidates.
+- Unsupported locals remain unavailable, and prior successful locals may be
+  visible only as `stale/stale_runtime_value` when proof disappears.
 
 ## Future WinDbg Smoke Tests
 
@@ -350,5 +478,5 @@ arguments should be fresh from stack slots.
 
 After stepping, entry-derived values should remain visible only as stale.
 
-Unsupported `v*` temporaries must be shown as unavailable or explicitly
-unsupported, never guessed.
+Unsupported `v*` temporaries must be shown as unavailable with a reason, or as
+an explicitly stale prior success, never guessed from their printed location.

@@ -27,6 +27,11 @@ COLUMNS = (
     "Status",
     "Confidence",
     "Reason",
+    "LvarIndex",
+    "Type",
+    "Source EA",
+    "Storage",
+    "Last Update PC",
 )
 
 
@@ -46,6 +51,11 @@ if ida_kernwin is not None:
                 ["Status", 12],
                 ["Confidence", 20],
                 ["Reason", 44],
+                ["LvarIndex", 9],
+                ["Type", 24],
+                ["Source EA", 16],
+                ["Storage", 24],
+                ["Last Update PC", 20],
             ]
             super().__init__(TITLE, cols, flags=ida_kernwin.Choose.CH_NOBTNS)
             self.view = view
@@ -108,6 +118,11 @@ class LiveVariablesView:
             row.status,
             row.confidence,
             row.reason,
+            str(row.lvar_index),
+            row.type_string,
+            row.source_ea,
+            row.storage,
+            row.last_pc,
         ]
 
     def show_mapping(self, payload: dict[str, Any]) -> None:

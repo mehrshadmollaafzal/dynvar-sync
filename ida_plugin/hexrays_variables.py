@@ -28,6 +28,7 @@ CONFIDENCE_UNKNOWN = "unknown"
 class VariableRecord:
     """IDA-side description and display state for one Hex-Rays variable."""
 
+    lvar_index: int
     name: str
     hexrays_kind: str
     type_string: str
@@ -43,6 +44,15 @@ class VariableRecord:
     reason: str = "not evaluated"
     last_pc: str = ""
     current_pc: str = ""
+    printed_location: str = ""
+    current_ea: str = ""
+    source_ea: str = ""
+    storage_kind: str = ""
+    storage: str = ""
+    current_pc_seq: int | None = None
+    last_success_value: str = ""
+    last_success_pc_seq: int | None = None
+    lvar_defea: str = ""
 
 
 @dataclass(frozen=True)
@@ -63,6 +73,7 @@ class VariableEnumerationResult:
     function_ea: str
     variables: list[VariableRecord]
     error: str = ""
+    cfunc: object | None = None
 
 
 def is_v_temporary_name(name: str) -> bool:
@@ -73,6 +84,7 @@ def is_v_temporary_name(name: str) -> bool:
 def unsupported_variable(
     name: str,
     *,
+    lvar_index: int = -1,
     size: int = 0,
     type_string: str = "",
     function_start_ea: int = 0,
@@ -80,6 +92,7 @@ def unsupported_variable(
 ) -> VariableRecord:
     """Create an honest unsupported-variable record."""
     return VariableRecord(
+        lvar_index=lvar_index,
         name=name,
         hexrays_kind="temporary" if is_v_temporary_name(name) else "unknown",
         type_string=type_string,
@@ -93,6 +106,7 @@ def unsupported_variable(
         confidence=CONFIDENCE_UNSUPPORTED_VARIABLE,
         reason="variable does not have a reliable runtime location in v1",
         current_pc=current_pc,
+        printed_location="unsupported",
     )
 
 
@@ -153,6 +167,7 @@ def enumerate_hexrays_variables(ea: int, current_pc: str = "") -> VariableEnumer
             ArgumentDetection(False, None, "not detected as function argument"),
         )
         record = VariableRecord(
+            lvar_index=lvar_index,
             name=name,
             hexrays_kind=_classify_lvar(name, detection.is_arg),
             type_string=_safe_type_string(lvar),
@@ -170,6 +185,8 @@ def enumerate_hexrays_variables(ea: int, current_pc: str = "") -> VariableEnumer
                 else "variable does not have a reliable runtime location in v1"
             ),
             current_pc=current_pc,
+            printed_location=location,
+            lvar_defea=_safe_definition_ea(lvar),
         )
         variables.append(record)
 
@@ -178,6 +195,7 @@ def enumerate_hexrays_variables(ea: int, current_pc: str = "") -> VariableEnumer
         function_start_ea=function_start,
         function_ea=_format_hex(function_start),
         variables=variables,
+        cfunc=cfunc,
     )
 
 
@@ -513,6 +531,16 @@ def _safe_location_string(lvar: object, size: int) -> str:
     if _safe_bool_call(lvar, "is_stk_var"):
         return "hexrays_stack"
     return "unknown"
+
+
+def _safe_definition_ea(lvar: object) -> str:
+    try:
+        value = int(getattr(lvar, "defea"))
+    except (AttributeError, TypeError, ValueError):
+        return ""
+    if value < 0 or value == ((1 << 64) - 1):
+        return ""
+    return _format_hex(value)
 
 
 def _format_hex(value: int) -> str:
