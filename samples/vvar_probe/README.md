@@ -11,7 +11,7 @@ EA, lvar index, Source EA, and Storage rather than assuming a name such as
 Open an **x64 Native Tools Command Prompt for Visual Studio**, change to this
 directory, and run:
 
-```bat
+```cmd
 build.bat
 ```
 

@@ -29,5 +29,5 @@ Correctness rules:
 - Use a separate Live Variables view first.
 - Never show guessed values as fresh.
 - Unsupported Hex-Rays temporaries must be unavailable, not guessed.
-- Late responses for older PCs or older `pc_seq` values must be ignored or
-  marked stale.
+- IDA must reject late responses for older PCs or older `pc_seq` values as
+  current-row updates; previously exact values may remain only stale.

@@ -18,8 +18,12 @@ Responsibilities:
 
 ## Current Behavior
 
-Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
-`Edit/DayVarSync`:
+Install the plugin by copying all `ida_plugin\*.py` files into the user IDA
+plugin directory, then restart IDA. See
+[Installation](../docs/09_installation.md) for the canonical PowerShell
+commands.
+
+The plugin registers these actions under `Edit/DayVarSync`:
 
 - `DayVarSync: Connect`
 - `DayVarSync: Disconnect`
@@ -38,8 +42,8 @@ Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
 127.0.0.1:9100
 ```
 
-For WSL/Windows deployments, enter the broker address reachable from Windows,
-for example `<WSL_IP>:9100`.
+The public setup uses `127.0.0.1:9100`. Custom network deployments are not
+covered by the guide.
 
 The connection runs in a background socket thread so the IDA UI does not block
 when the broker is unavailable. Incoming messages are marshalled back onto the
@@ -112,10 +116,11 @@ Supported classes are:
   fresh / exact_register_location
   ```
 
-- One structural, non-aliased stack lvar of exactly 1, 2, 4, or 8 bytes. IDA
-  SP analysis must be complete and non-fuzzy. The plugin converts the
-  decompiler stack offset to a current-RSP-relative offset, requests `rsp`,
-  then reads exactly the lvar width and decodes it little-endian. Result:
+- One structural, non-aliased same-native-block stack lvar of exactly 1, 2, 4,
+  or 8 bytes. IDA SP analysis must be complete and non-fuzzy. The plugin
+  converts the decompiler stack offset to a current-RSP-relative offset,
+  requests `rsp`, then reads exactly the lvar width and decodes it
+  little-endian. Result:
 
   ```text
   fresh / exact_stack_location
@@ -181,18 +186,19 @@ Value display is normalized in the Live Variables table:
 
 ## Manual Test
 
-Use [../docs/09_installation.md](../docs/09_installation.md) for the full
-setup. The minimal WSL broker command is:
+Use [Installation](../docs/09_installation.md) for setup and
+[Quick Start](../docs/10_quick_start_validation.md) for the manual smoke test.
+The canonical broker command is:
 
-```bash
-python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 In IDA:
 
 ```text
-Load ida_plugin/dayvar_plugin.py
-DayVarSync -> Connect
+Edit -> DayVarSync -> Connect
+127.0.0.1:9100
 Open/decompile a function near the synced PC
 ```
 
@@ -200,7 +206,7 @@ In WinDbg:
 
 ```text
 .load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
-!dvs_connect <WSL_IP> 9100
+!dvs_connect 127.0.0.1 9100
 !dvs_pc
 !dvs_step p 1
 ```

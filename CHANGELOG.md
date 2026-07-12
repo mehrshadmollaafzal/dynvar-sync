@@ -2,16 +2,6 @@
 
 ## dynvar-sync v0.1.0-research
 
-Release identity:
-
-```text
-dynvar-sync v0.1.0-research
-```
-
-`dynvar-sync v0.1.0-research` is a best-effort, confidence-aware research
-prototype that synchronizes WinDbg runtime state with IDA Pro and recovers only
-Hex-Rays variables whose runtime values can be structurally proven.
-
 ### Added
 
 - JSONL/TCP broker for one active IDA client and one active WinDbg client.
@@ -24,14 +14,17 @@ Hex-Rays variables whose runtime values can be structurally proven.
 - Exact-entry Windows x64 argument recovery for supported register and stack
   argument locations.
 - Conservative scalar local recovery for the first supported subset:
-  register-backed lvars, narrow stack-backed lvars, and exact constants.
+  register-backed lvars, exact constants, and a narrow same-block
+  stack-backed subset.
 - Stale/last-observed handling and response correlation by `pc_seq`,
   `runtime_pc`, and request id.
 - Diagnostic levels: `quiet`, `normal`, `verbose`, and `trace`.
 - Live Variables filters: All, Fresh, Recoverable, Arguments, Named locals,
   and Unavailable.
 - Bounded local candidate selection for usability and performance.
-- Deterministic `samples/vvar_probe/` manual validation sample.
+- Deterministic `samples\vvar_probe\` manual validation sample.
+- Windows localhost-first installation and quick-start documentation.
+- Permanent multi-file IDA plugin installation workflow.
 
 ### Limitations
 
@@ -42,10 +35,3 @@ Hex-Rays variables whose runtime values can be structurally proven.
 - No XMM/SIMD/FPU recovery, aggregate decoding, scattered-variable
   reconstruction, broad stack recovery, alias analysis, dynamic tracing, or
   source-level scope model.
-
-### Validation Baseline
-
-- Outside-IDA unit suite: 45 tests.
-- Python compile check for `broker/*.py`, `ida_plugin/*.py`, and `samples/*.py`.
-- WinDbg extension build is environment-dependent and must be validated in a
-  Windows SDK or compatible MinGW-w64 environment.

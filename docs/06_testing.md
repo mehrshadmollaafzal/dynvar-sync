@@ -27,20 +27,20 @@ Test:
 
 Terminal 1:
 
-```bash
-python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 Terminal 2:
 
-```bash
-python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
+```cmd
+py -3 .\samples\fake_ida_client.py --host 127.0.0.1 --port 9100
 ```
 
 Terminal 3:
 
-```bash
-python3 samples/fake_windbg_client.py --host 127.0.0.1 --port 9100
+```cmd
+py -3 .\samples\fake_windbg_client.py --host 127.0.0.1 --port 9100
 ```
 
 Expected broker logs include:
@@ -66,33 +66,32 @@ Known Phase 1 limitations:
 
 ## WinDbg Extension PC Test
 
-Build `windbg_ext/dayvar.dll` on Windows with the Windows SDK / Visual Studio
+Build `windbg_ext\build\dayvar.dll` on Windows with the Windows SDK / Visual Studio
 developer environment. The extension depends on `dbgeng.h`, WinSock2, and
-`Ws2_32.lib`. Build outputs should go under `windbg_ext/build/`.
+`Ws2_32.lib`. Build outputs should go under `windbg_ext\build\`.
 
-WSL/Windows test environment placeholders:
+Windows localhost test environment:
 
 ```text
-Broker runs inside WSL.
-WinDbg Preview runs on the Windows host.
-IDA Pro runs on the Windows host.
-
-Broker host: <WSL_IP>
+Broker host: 127.0.0.1
 Broker port: 9100
 ```
 
 Example build command:
 
-```bat
+```cmd
 if not exist windbg_ext\build mkdir windbg_ext\build
+
 cl /nologo /LD /W4 /D_CRT_SECURE_NO_WARNINGS ^
-  windbg_ext\dayvar.c windbg_ext\socket_client.c ^
-  windbg_ext\json_writer.c windbg_ext\dbgeng_ops.c ^
+  windbg_ext\dayvar.c ^
+  windbg_ext\socket_client.c ^
+  windbg_ext\json_writer.c ^
+  windbg_ext\dbgeng_ops.c ^
   /Fe:windbg_ext\build\dayvar.dll ^
   /link /DEF:windbg_ext\dayvar.def Ws2_32.lib
 ```
 
-MinGW-w64 cross-check command:
+MinGW-w64 cross-check command for developer environments:
 
 ```bash
 mkdir -p windbg_ext/build
@@ -105,21 +104,21 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 
 Terminal 1:
 
-```bash
-python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 Terminal 2:
 
-```bash
-python3 samples/fake_ida_client.py --host <WSL_IP> --port 9100
+```cmd
+py -3 .\samples\fake_ida_client.py --host 127.0.0.1 --port 9100
 ```
 
 WinDbg:
 
 ```text
 .load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
-!dvs_connect <WSL_IP> 9100
+!dvs_connect 127.0.0.1 9100
 !dvs_pc
 !dvs_step p 1
 !dvs_disconnect
@@ -185,34 +184,29 @@ Current limitations:
 
 ## Real IDA Plugin Auto-Live Test
 
-This flow replaces `samples/fake_ida_client.py` with the IDA plugin while
+This flow replaces `samples\fake_ida_client.py` with the IDA plugin while
 keeping the existing broker and WinDbg extension.
 
-Terminal 1 in WSL:
+Terminal 1:
 
-```bash
-python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
-In IDA on the Windows host:
+Install the plugin as documented in [Installation](09_installation.md), restart
+IDA, then use:
 
 ```text
-Load ida_plugin/dayvar_plugin.py
-DayVarSync -> Connect
+Edit -> DayVarSync -> Connect
+127.0.0.1:9100
 Open/decompile a function near the synced PC
-```
-
-The connect action prompts for a broker endpoint. Use:
-
-```text
-<WSL_IP>:9100
 ```
 
 In WinDbg:
 
 ```text
 .load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
-!dvs_connect <WSL_IP> 9100
+!dvs_connect 127.0.0.1 9100
 !dvs_pc
 !dvs_step p 1
 ```
@@ -291,12 +285,8 @@ Current real IDA plugin limitations:
 
 Run the stdlib-only regression suite from the repository root:
 
-```bash
-python3 -m unittest -v \
-  samples.test_dynvar_core \
-  samples.test_v_variable_recovery \
-  samples.test_v_variable_cfg \
-  samples.test_usability_controls
+```cmd
+py -3 -m unittest discover -s samples -p "test_*.py" -v
 ```
 
 The tests cover the unchanged entry-argument register/stack behavior and stale
@@ -356,7 +346,7 @@ as passed until it is verified in the real IDA/WinDbg session.
 
 ## vvar Probe Manual Recovery Test
 
-Build and use `samples/vvar_probe/` as described in its README. Its MASM
+Build and use `samples\vvar_probe\` as described in its README. Its MASM
 functions export instruction-accurate symbols for definitions, retained uses,
 and register reuse. Hex-Rays may propagate a simple machine temporary away, so
 identify test rows by function EA, lvar index, Source EA, and Storage rather

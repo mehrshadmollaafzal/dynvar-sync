@@ -1,108 +1,135 @@
-# Installation Guide
+# Installation
 
-This guide starts from a clean checkout of `dynvar-sync v0.1.0-research`.
+This guide documents the supported public setup for
+`dynvar-sync v0.1.0-research`:
+
+- IDA Pro runs on Windows.
+- WinDbg runs on Windows.
+- The Python broker runs on the same Windows machine.
+- All components connect through `127.0.0.1:9100`.
+
+Custom network deployments are not covered by this guide.
 
 ## Prerequisites
 
 - Windows x64 target process or kernel debugging session.
-- WinDbg Preview or WinDbg with DbgEng extension support.
 - IDA Pro 9.3 with Hex-Rays decompiler.
-- Python 3 on the broker host.
-- A Windows SDK / Visual Studio x64 Native Tools environment for the WinDbg
-  extension build, or MinGW-w64 for the documented cross-check build.
-- Network reachability between WinDbg, IDA, and the broker. In the documented
-  WSL/Windows setup, the broker runs in WSL and Windows tools connect to the
-  WSL IP address.
+- WinDbg Preview or WinDbg with DbgEng extension support.
+- Python 3 available through the Windows Python launcher `py -3`.
+- Windows SDK / Visual Studio x64 Native Tools Command Prompt for building the
+  WinDbg extension.
 
 ## Repository Layout
 
 ```text
-broker/      Python JSONL/TCP broker
-ida_plugin/  IDAPython plugin and Live Variables view
-windbg_ext/  WinDbg extension source
-samples/     Fake clients, tests, and vvar_probe
-docs/        Architecture, testing, support, and release docs
-tools/       Reserved for helper scripts; no required release scripts yet
-ForCodex/    Original planning material
+broker\      Python JSONL/TCP broker
+ida_plugin\  IDAPython plugin modules
+windbg_ext\  WinDbg extension source
+samples\     Fake clients, tests, and vvar_probe
+docs\        Documentation
+tools\       Reserved helper-script area
+```
+
+## Install The IDA Plugin
+
+The IDA plugin is multi-file. Install all Python modules from `ida_plugin\`,
+not only `dayvar_plugin.py`.
+
+From PowerShell at the repository root:
+
+```powershell
+$IdaPlugins = "$env:APPDATA\Hex-Rays\IDA Pro\plugins"
+
+New-Item -ItemType Directory -Force -Path $IdaPlugins | Out-Null
+
+Copy-Item `
+    .\ida_plugin\*.py `
+    $IdaPlugins `
+    -Force
+```
+
+Restart IDA after copying the files. Verify the plugin loaded by checking for:
+
+```text
+Edit -> DayVarSync
+```
+
+To update the plugin later, repeat:
+
+```powershell
+Copy-Item `
+    .\ida_plugin\*.py `
+    "$env:APPDATA\Hex-Rays\IDA Pro\plugins" `
+    -Force
+```
+
+To uninstall the plugin cleanly, remove the installed files:
+
+```powershell
+$IdaPlugins = "$env:APPDATA\Hex-Rays\IDA Pro\plugins"
+
+Remove-Item -Force `
+    "$IdaPlugins\address_mapping.py", `
+    "$IdaPlugins\dayvar_plugin.py", `
+    "$IdaPlugins\dynvar_core.py", `
+    "$IdaPlugins\hexrays_variables.py", `
+    "$IdaPlugins\live_variables_view.py", `
+    "$IdaPlugins\protocol_client.py", `
+    "$IdaPlugins\v_variable_recovery.py"
+```
+
+Do not copy `README.md`, `__pycache__`, generated files, tests, or unrelated
+artifacts into the IDA plugin directory.
+
+## Build The WinDbg Extension
+
+Open an x64 Native Tools Command Prompt at the repository root:
+
+```cmd
+if not exist windbg_ext\build mkdir windbg_ext\build
+
+cl /nologo /LD /W4 /D_CRT_SECURE_NO_WARNINGS ^
+  windbg_ext\dayvar.c ^
+  windbg_ext\socket_client.c ^
+  windbg_ext\json_writer.c ^
+  windbg_ext\dbgeng_ops.c ^
+  /Fe:windbg_ext\build\dayvar.dll ^
+  /link /DEF:windbg_ext\dayvar.def Ws2_32.lib
+```
+
+The expected output is:
+
+```text
+windbg_ext\build\dayvar.dll
 ```
 
 ## Start The Broker
 
-From the repository root:
+From Command Prompt at the repository root:
 
-```bash
-python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
-```
-
-Use the interface address that Windows can reach. For WSL, get the WSL address
-with:
-
-```bash
-hostname -I
-```
-
-For local fake-client testing entirely inside one environment, use:
-
-```bash
-python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 Expected broker startup:
 
 ```text
-[broker] listening on <host>:9100
+[broker] listening on 127.0.0.1:9100
 ```
 
-## Build The WinDbg Extension
+Leave this window open.
 
-From a Windows x64 Native Tools Command Prompt at the repository root:
+## Connect IDA
 
-```bat
-if not exist windbg_ext\build mkdir windbg_ext\build
-cl /nologo /LD /W4 /D_CRT_SECURE_NO_WARNINGS ^
-  windbg_ext\dayvar.c windbg_ext\socket_client.c ^
-  windbg_ext\json_writer.c windbg_ext\dbgeng_ops.c ^
-  /Fe:windbg_ext\build\dayvar.dll ^
-  /link /DEF:windbg_ext\dayvar.def Ws2_32.lib
-```
+1. Start or restart IDA Pro 9.3.
+2. Open the target binary or kernel image.
+3. Ensure Hex-Rays can decompile the function you want to inspect.
+4. Use `Edit -> DayVarSync -> Connect`.
+5. Enter:
 
-The documented MinGW-w64 cross-check command is:
-
-```bash
-mkdir -p windbg_ext/build
-x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
-  -o windbg_ext/build/dayvar.dll \
-  windbg_ext/dayvar.c windbg_ext/socket_client.c \
-  windbg_ext/json_writer.c windbg_ext/dbgeng_ops.c \
-  windbg_ext/dayvar.def -lws2_32
-```
-
-## Load The WinDbg Extension
-
-In WinDbg:
-
-```text
-.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
-!dvs_status
-```
-
-Before connection, `!dvs_status` should report disconnected state.
-
-## Load The IDA Plugin
-
-In IDA Pro 9.3:
-
-1. Open the target binary or kernel image.
-2. Ensure Hex-Rays can decompile the functions you want to inspect.
-3. Load or run `ida_plugin/dayvar_plugin.py`.
-4. Use `Edit/DayVarSync/Connect`.
-
-When prompted for the broker endpoint, use the broker host and port, for
-example:
-
-```text
-<WSL_IP>:9100
-```
+   ```text
+   127.0.0.1:9100
+   ```
 
 Expected broker log:
 
@@ -110,12 +137,14 @@ Expected broker log:
 [broker] registered role=ida
 ```
 
-## Connect WinDbg
+## Load And Connect WinDbg
 
-In WinDbg, connect to the same broker:
+In WinDbg:
 
 ```text
-!dvs_connect <WSL_IP> 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect 127.0.0.1 9100
+!dvs_status
 ```
 
 Expected broker log:
@@ -124,11 +153,9 @@ Expected broker log:
 [broker] registered role=windbg
 ```
 
-Expected WinDbg output includes a successful connection and hello send.
-
 ## Send The First PC
 
-Stop the target at a function entry or another known instruction, then run:
+Stop the target at a function entry or known instruction, then run:
 
 ```text
 !dvs_pc
@@ -145,7 +172,7 @@ mem_request
 mem_response
 ```
 
-Some functions will not need memory requests. Unsupported or optimized-away
+Some functions do not require memory requests. Unsupported or optimized-away
 locals may remain unavailable; that is expected.
 
 ## Disconnect And Reconnect
@@ -159,9 +186,11 @@ WinDbg:
 IDA:
 
 ```text
-Edit/DayVarSync/Disconnect
+Edit -> DayVarSync -> Disconnect
 ```
 
 The broker accepts a new client for either role and replaces the old session
 when another client registers with the same role. After reconnecting, run
 `!dvs_pc` again to establish a fresh `pc_seq` context.
+
+For common setup issues, see [Troubleshooting](11_troubleshooting.md).

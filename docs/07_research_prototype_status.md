@@ -78,7 +78,7 @@ definitions, register clobbers, native predecessor storage survival, exact
 pre-instruction semantics, and bounded loop traversal.
 
 Manual documentation covers real WinDbg and IDA flows for `!dvs_pc`,
-`!dvs_step`, entry arguments, and the `samples/vvar_probe` local recovery
+`!dvs_step`, entry arguments, and the `samples\vvar_probe` local recovery
 probe. Those live IDA/WinDbg checks remain required because outside-IDA tests
 cannot execute Hex-Rays SWIG objects, IDA microcode, IDA SP analysis, processor
 module register-access APIs, or DbgEng.

@@ -14,36 +14,20 @@ Completion for this release means:
 - unsupported cases explicitly fail closed;
 - full Hex-Rays lvar recovery is out of scope for v0.1.0-research.
 
-## Maintainer Checklist
+## Maintainer Checks
 
-- Start from a clean checkout.
 - Confirm `VERSION` contains `v0.1.0-research`.
-- Run the Python compile check:
-
-  ```bash
-  python3 -m py_compile broker/*.py ida_plugin/*.py samples/*.py
-  ```
-
-- Run the outside-IDA tests:
-
-  ```bash
-  python3 -m unittest discover -s samples -p "test_*.py" -v
-  ```
-
-- Run whitespace validation:
-
-  ```bash
-  git diff --check
-  ```
-
-- Build `windbg_ext/build/dayvar.dll` using the documented Windows SDK or
-  MinGW-w64 command.
-- Start the broker.
-- Connect IDA.
-- Connect WinDbg.
-- Run the user-mode smoke test in `docs/10_quick_start_validation.md`.
-- Run the kernel-mode smoke test notes in `docs/10_quick_start_validation.md`
-  when a kernel debugging environment is available.
+- Run the developer regression commands in [Testing](06_testing.md).
+- Build `windbg_ext\build\dayvar.dll` with the Windows SDK / Visual Studio
+  x64 Native Tools command documented in [Installation](09_installation.md).
+- Install the IDA plugin by copying all `ida_plugin\*.py` files into the user
+  IDA plugin directory and restarting IDA.
+- Start the broker on `127.0.0.1:9100`.
+- Connect IDA to `127.0.0.1:9100`.
+- Connect WinDbg with `!dvs_connect 127.0.0.1 9100`.
+- Run the user-mode smoke test in [Quick Start](10_quick_start_validation.md).
+- Run a kernel-mode smoke test when a matching kernel debugging environment is
+  available.
 - Exercise diagnostic levels: `quiet`, `normal`, `verbose`, and `trace`.
 - Exercise Live Variables filters: All, Fresh, Recoverable, Arguments, Named
   locals, and Unavailable.
@@ -70,12 +54,10 @@ Completion for this release means:
 
 Treat any of these as blockers:
 
-- source or docs describe `dynvar-sync` as a source-level debugger;
+- docs describe `dynvar-sync` as production-ready or as a source-level
+  debugger;
 - docs claim recovery of all Hex-Rays lvars;
 - broker or WinDbg extension interprets Hex-Rays variables;
 - unsupported values are displayed as exact current values;
 - old `pc_seq` responses can update current rows;
-- `ForCodex/` is modified beyond privacy, project-name, or broken-link
-  cleanup;
-- a release commit or tag is created before the maintainer explicitly requests
-  it.
+- the documented Windows localhost setup cannot complete the smoke test.

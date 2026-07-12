@@ -54,20 +54,24 @@ at 4096 bytes and return `bytes_hex` in lowercase hex. Failed reads return a
 
 Build on Windows with the Windows SDK / Visual Studio developer environment.
 The extension uses `dbgeng.h`, WinSock2, and `Ws2_32.lib`. Keep generated
-outputs under `windbg_ext/build/`.
+outputs under `windbg_ext\build\`.
 
-Example command from the repository root:
+Primary Windows build command from the repository root:
 
-```bat
+```cmd
 if not exist windbg_ext\build mkdir windbg_ext\build
+
 cl /nologo /LD /W4 /D_CRT_SECURE_NO_WARNINGS ^
-  windbg_ext\dayvar.c windbg_ext\socket_client.c ^
-  windbg_ext\json_writer.c windbg_ext\dbgeng_ops.c ^
+  windbg_ext\dayvar.c ^
+  windbg_ext\socket_client.c ^
+  windbg_ext\json_writer.c ^
+  windbg_ext\dbgeng_ops.c ^
   /Fe:windbg_ext\build\dayvar.dll ^
   /link /DEF:windbg_ext\dayvar.def Ws2_32.lib
 ```
 
-MinGW-w64 cross-check command used in this environment:
+MinGW-w64 may be used as a secondary developer build sanity check, but it is
+not the primary installation path.
 
 ```bash
 mkdir -p windbg_ext/build
@@ -80,38 +84,19 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 
 ## Manual Test
 
-WSL/Windows test environment placeholders:
-
-```text
-Broker runs inside WSL.
-WinDbg Preview runs on the Windows host.
-IDA Pro runs on the Windows host.
-
-Broker host: <WSL_IP>
-Broker port: 9100
-```
-
-Terminal 1:
-
-```bash
-python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
-```
-
-Terminal 2:
-
-```bash
-python3 samples/fake_ida_client.py --host <WSL_IP> --port 9100
-```
-
 WinDbg:
 
 ```text
 .load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
-!dvs_connect <WSL_IP> 9100
+!dvs_connect 127.0.0.1 9100
 !dvs_pc
 !dvs_step p 1
 !dvs_disconnect
 ```
+
+Use [Installation](../docs/09_installation.md) for the full Windows localhost
+setup and [Quick Start](../docs/10_quick_start_validation.md) for the
+end-to-end smoke test.
 
 Expected broker flow for `!dvs_pc` and for each `!dvs_step` refresh:
 

@@ -26,8 +26,9 @@ object followed by `\n`.
 - `request_id` identifies a logical runtime read request.
 
 Every PC-dependent request and response must carry `pc_seq` and `runtime_pc`
-when available. IDA must apply a response as fresh only when it matches the
-current `pc_seq` and pending `request_id`.
+when available. The broker preserves these fields while routing. IDA owns the
+pending request table and may apply a response as fresh only when it matches
+the current `pc_seq`, expected `runtime_pc`, and pending `request_id`.
 
 ## Current Message Types
 
@@ -104,8 +105,9 @@ Recommended `reason` values are `dvs_pc`, `dvs_step`, `manual_refresh`,
 ## Staleness Rule
 
 Late responses from older `pc_seq` values must not update the Live Variables
-view as fresh. They may be ignored, logged, or used only to mark prior values
-stale.
+view as fresh. The broker routes and logs messages but does not decide
+variable freshness. IDA rejects stale responses for current rows and may keep
+previously exact values only as stale / last observed.
 
 Protocol version starts at `1`. Breaking changes must increment it.
 

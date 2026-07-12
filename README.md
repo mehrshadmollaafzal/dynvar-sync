@@ -1,132 +1,88 @@
 # dynvar-sync v0.1.0-research
 
-`dynvar-sync` is a best-effort, confidence-aware research prototype that
-synchronizes stopped WinDbg runtime state with IDA Pro and recovers only
-Hex-Rays variables whose runtime values can be structurally proven.
+> [!IMPORTANT]
+> **Development disclosure:** This project was primarily implemented with
+> OpenAI Codex under human direction, review, and manual validation. It is a
+> vibe-coded research prototype and has not undergone a formal security or
+> production-readiness audit.
 
-It is not a source-level debugger and does not guarantee recovery of every
-Hex-Rays lvar.
+WinDbg stops at an instruction. `dynvar-sync` moves IDA Pro to the
+corresponding address. The `DayVarSync Live Variables` view displays runtime
+values only when the IDA-side analysis can structurally prove where the value
+currently lives.
 
-## Current Scope
+`dynvar-sync` is a best-effort, confidence-aware research prototype for
+Windows x64 targets using IDA Pro 9.3, Hex-Rays, and WinDbg. It is not a
+source-level debugger, is not production-ready, and does not guarantee recovery
+of every Hex-Rays lvar.
 
-- Python JSONL/TCP broker for one active IDA client and one active WinDbg
-  client.
-- WinDbg extension commands for connection, PC/module/base reporting, bounded
-  register/memory request pumping, and asynchronous stepping.
-- IDA Pro 9.3 plugin that maps a WinDbg runtime PC to an IDA EA, jumps there,
-  enumerates Hex-Rays lvars, and displays a Live Variables table.
-- Exact-entry Windows x64 argument recovery for documented register and stack
-  argument locations.
-- Conservative scalar local recovery for a narrow supported subset:
-  register-backed lvars, stack-backed lvars, and constants when proof exists.
-- Stale / last observed handling for values that were exact at an earlier PC.
-- Fail-closed behavior for unavailable, unsupported, ambiguous, and
-  optimized-away rows.
+## What It Does
 
-The IDA UI still uses the established `DayVarSync` menu and Live Variables
-view names. Those identifiers are implementation/UI names; the public project
-name is `dynvar-sync`.
+- Synchronizes a stopped WinDbg PC/module/base with the corresponding IDA EA.
+- Displays Hex-Rays variables in a separate Live Variables table.
+- Recovers exact-entry Windows x64 arguments for the documented ABI locations.
+- Recovers a narrow, structurally proven subset of scalar local values:
+  register-backed lvars, exact constants, and same-block stack-backed lvars
+  when reliable SP/frame and storage proof exists.
+- Preserves previously exact values only as stale / last observed when current
+  proof disappears.
+- Fails closed for unavailable, ambiguous, unsupported, optimized-away, or
+  not-materialized values.
+
+The IDA UI still uses the established `DayVarSync` menu and log names. Those
+are implementation/UI identifiers; the public project name is `dynvar-sync`.
 
 ## Documentation
 
 - [Documentation index](docs/00_index.md)
-- [Installation guide](docs/09_installation.md)
-- [Quick-start validation](docs/10_quick_start_validation.md)
+- [Installation](docs/09_installation.md)
+- [Quick Start](docs/10_quick_start_validation.md)
+- [Troubleshooting](docs/11_troubleshooting.md)
 - [Support matrix and limitations](docs/07_research_prototype_status.md)
 - [Variable model](docs/03_variable_model.md)
-- [Testing guide](docs/06_testing.md)
-- [Release checklist](docs/08_release_checklist.md)
+- [Testing](docs/06_testing.md)
 - [Release notes](docs/release_notes_v0.1.0_research.md)
 - [Changelog](CHANGELOG.md)
-- [Version](VERSION)
 
 ## Repository Layout
 
 ```text
-broker/      Python broker and protocol helpers
-ida_plugin/  IDAPython plugin for arguments and conservative local recovery
-windbg_ext/  WinDbg extension source
-samples/     Fake clients, tests, and deterministic vvar probe
-docs/        Architecture, installation, testing, support, and release docs
-tools/       Reserved helper-script area; no required release scripts yet
-ForCodex/    Original planning pack
+broker\      Python broker and protocol helpers
+ida_plugin\  IDAPython plugin modules
+windbg_ext\  WinDbg extension source
+samples\     Fake clients, tests, and deterministic vvar probe
+docs\        Architecture, installation, testing, support, and release docs
+tools\       Reserved helper-script area
 ```
 
-## Architecture
+## Localhost Setup
 
-```text
-IDA Plugin <-> Python Broker <-> WinDbg Extension DLL
-```
+The public guide documents one simple setup:
 
-- IDA owns Hex-Rays interpretation, variable proof, UI state, and stale
-  response rejection.
-- The broker owns JSONL/TCP routing, session registration, protocol envelope
-  validation, and logs.
-- WinDbg owns low-level runtime facts: PC, module base, registers, memory, and
-  debugger stepping.
+- IDA Pro runs on Windows.
+- WinDbg runs on Windows.
+- The Python broker runs on Windows.
+- All components connect to `127.0.0.1:9100`.
 
-## Minimal Local Broker Check
+Custom network deployments are not covered by the guide.
 
-Run this from the repository root for a non-IDA smoke test:
+Start with [Installation](docs/09_installation.md), then run the manual
+[Quick Start](docs/10_quick_start_validation.md).
 
-```bash
-python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
-```
+## Limitations
 
-In two other terminals:
+Unsupported or unavailable rows are expected for optimized-away values,
+ambiguous reaching definitions, unresolved program points, fuzzy stack state,
+address-taken or aliased locals, scattered variables, XMM/SIMD/FPU values,
+aggregates, unsupported widths, and values requiring execution history after
+storage overwrite.
 
-```bash
-python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
-```
-
-```bash
-python3 samples/fake_windbg_client.py --host 127.0.0.1 --port 9100
-```
-
-For real IDA/WinDbg setup, use the canonical
-[installation guide](docs/09_installation.md). In WSL/Windows deployments, bind
-the broker to the WSL address that Windows can reach and connect IDA/WinDbg to
-`<WSL_IP>:9100`.
-
-## Supported Value States
-
-- `exact current value`: proven fresh for the current `pc_seq`.
-- `stale / last observed`: exact at an earlier accepted PC, no longer proven
-  for the current PC.
-- `unavailable`: known row without enough evidence for a value.
-- `ambiguous`: multiple possible definitions or storage states.
-- `unsupported`: outside the implemented research subset.
-- `not yet defined`: no reaching definition has executed at the current
-  pre-instruction PC.
-- `optimized away / not materialized`: Hex-Rays did not expose usable storage
-  or definition information.
-
-See [docs/03_variable_model.md](docs/03_variable_model.md) and
-[docs/07_research_prototype_status.md](docs/07_research_prototype_status.md)
-for the full model.
+See the [support matrix](docs/07_research_prototype_status.md) for the precise
+current boundary.
 
 ## Validation
 
-Outside IDA, the current regression suite is:
+See [Quick Start](docs/10_quick_start_validation.md) for a manual IDA/WinDbg
+smoke test.
 
-```bash
-python3 -m py_compile broker/*.py ida_plugin/*.py samples/*.py
-python3 -m unittest discover -s samples -p "test_*.py" -v
-git diff --check
-```
-
-The WinDbg extension build and live IDA/WinDbg behavior require the appropriate
-Windows, IDA Pro 9.3, Hex-Rays, and DbgEng environment. Manual release
-validation is documented in [docs/08_release_checklist.md](docs/08_release_checklist.md)
-and [docs/10_quick_start_validation.md](docs/10_quick_start_validation.md).
-
-## Release Boundary
-
-`dynvar-sync v0.1.0-research` is complete when:
-
-- transport and synchronization prototype behavior is validated;
-- exact-entry argument recovery works for the documented Windows x64 scope;
-- best-effort supported scalar lvar recovery works only when structurally
-  proven;
-- unsupported cases fail closed; and
-- full Hex-Rays lvar recovery remains explicitly out of scope.
+Developer regression commands are documented in [Testing](docs/06_testing.md).

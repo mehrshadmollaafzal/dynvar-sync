@@ -7,8 +7,8 @@ debugger state.
 
 Run it with:
 
-```bash
-python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
+```cmd
+py -3 .\broker\dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 The broker:

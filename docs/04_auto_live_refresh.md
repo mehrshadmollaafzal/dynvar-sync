@@ -39,4 +39,6 @@ it must:
 - Keep `!dvs_poll` available as a manual fallback.
 
 IDA must accept a response only when it is `ok`, has the current `pc_seq`, has
-the expected `runtime_pc` when present, and has a pending `request_id`.
+the expected `runtime_pc` when present, and has a pending `request_id`. The
+broker only routes and preserves these fields; IDA owns the semantic freshness
+decision.
