@@ -1,8 +1,8 @@
 # WinDbg Extension
 
-The WinDbg extension implements the v0.1.0-research C-first commands for
-broker connection, PC synchronization, runtime register/memory reads, and
-asynchronous stepping.
+The WinDbg extension implements the `dynvar-sync v0.1.0-research` C-first
+commands for broker connection, PC synchronization, runtime register/memory
+reads, and asynchronous stepping.
 
 Implemented commands:
 
@@ -80,36 +80,34 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 
 ## Manual Test
 
-Current WSL/Windows test environment:
+WSL/Windows test environment placeholders:
 
 ```text
-Codex runs inside WSL.
 Broker runs inside WSL.
 WinDbg Preview runs on the Windows host.
 IDA Pro runs on the Windows host.
 
-WSL IP:     172.28.70.90
-Windows IP: 172.28.64.1
+Broker host: <WSL_IP>
 Broker port: 9100
 ```
 
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
+python3 samples/fake_ida_client.py --host <WSL_IP> --port 9100
 ```
 
 WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-!dvs_connect 172.28.70.90 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect <WSL_IP> 9100
 !dvs_pc
 !dvs_step p 1
 !dvs_disconnect

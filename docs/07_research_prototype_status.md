@@ -1,14 +1,14 @@
 # Research Prototype Status
 
-This document defines the measured closure baseline for the current
-`research/v-recovery-prototype` branch. DayVarSync is a best-effort,
-confidence-aware runtime variable recovery research prototype for IDA Pro 9.3,
-Hex-Rays, and WinDbg Preview on Windows x64. It is not a source-level debugger
-and does not guarantee recovery of every Hex-Rays lvar.
+This document defines the measured closure baseline for `dynvar-sync
+v0.1.0-research`. `dynvar-sync` is a best-effort, confidence-aware runtime
+variable recovery research prototype for IDA Pro 9.3, Hex-Rays, and WinDbg
+Preview on Windows x64. It is not a source-level debugger and does not
+guarantee recovery of every Hex-Rays lvar.
 
 ## Project Scope
 
-DayVarSync synchronizes a stopped WinDbg target with IDA, maps the runtime PC
+`dynvar-sync` synchronizes a stopped WinDbg target with IDA, maps the runtime PC
 to an IDA EA, enumerates Hex-Rays lvars, and shows confidence-tagged runtime
 values in a separate Live Variables table. IDA owns all decompiler and variable
 meaning. WinDbg only supplies low-level PC, register, memory, module, and
@@ -119,7 +119,7 @@ implemented behavior and the expected manual validation target.
 The prototype depends on final Hex-Rays microcode (`MMAT_LVARS`) retaining
 usable `mop_l` definitions and uses. If Hex-Rays propagates a value away,
 represents it as an expression, scatters it, aliases it, or emits ambiguous
-storage, DayVarSync must leave the row unavailable.
+storage, `dynvar-sync` must leave the row unavailable.
 
 PC handling is pre-instruction. A definition at the current EA has not executed
 yet. Recovery requires a unique top-level microcode run for the current native

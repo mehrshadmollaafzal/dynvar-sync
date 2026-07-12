@@ -1,4 +1,4 @@
-"""IDA plugin entry point for DayVar Sync.
+"""IDA plugin entry point for dynvar-sync.
 
 This module implements the IDA-side broker connection, Hex-Rays lvar
 enumeration, exact-entry argument reads, conservative local recovery, and the
@@ -33,7 +33,7 @@ from live_variables_view import FILTERS, LiveVariablesView, row_matches_filter
 from protocol_client import ProtocolClient
 from v_variable_recovery import VVariableRecovery
 
-DEFAULT_HOST = "172.28.70.90"
+DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9100
 PLUGIN_DIAGNOSTIC_LEVEL = os.environ.get("DAYVARSYNC_LOG_LEVEL", "normal")
 MAX_RECOVERY_ANALYSIS_CANDIDATES = 32

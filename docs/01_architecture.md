@@ -1,6 +1,6 @@
 # Architecture
 
-DayVar Sync uses a broker-centered design:
+`dynvar-sync` uses a broker-centered design:
 
 ```text
 IDA Plugin <-> Python Broker <-> WinDbg Extension DLL

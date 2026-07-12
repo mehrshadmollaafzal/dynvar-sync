@@ -1,4 +1,4 @@
-# dayvar-sync-version2 architecture pack
+# dynvar-sync architecture pack
 
 These Markdown files are intended to be given to Codex before implementation.
 
@@ -13,8 +13,7 @@ Recommended reading order:
 7. `06_CODEX_RULES.md`
 8. `07_TESTING_STRATEGY.md`
 9. `08_PERSONAL_OPINION_AND_RISKS.md`
-10. `09_CODEX_START_PROMPT.md`
-11. `10_AUTO_LIVE_REFRESH_FLOW.md`
+10. `09_AUTO_LIVE_REFRESH_FLOW.md`
 
 The files intentionally keep v1 narrow and correctness-focused.
 

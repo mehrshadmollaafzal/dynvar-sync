@@ -1,8 +1,8 @@
-# dayvar-sync-version2 — Project Brief for Codex
+# dynvar-sync — Project Brief for Codex
 
 ## Goal
 
-Build **dayvar-sync-version2**, a lightweight synchronization system between **IDA Pro 9.3** and **WinDbg Preview** for **Windows x64** targets.
+Build **dynvar-sync**, a lightweight synchronization system between **IDA Pro 9.3** and **WinDbg Preview** for **Windows x64** targets.
 
 The system should synchronize:
 
@@ -113,4 +113,3 @@ The first useful version is successful when:
 7. IDA displays those values as fresh/stale/unavailable.
 8. Stepping invalidates entry-only values instead of falsely showing them as fresh.
 9. A single `!dvs_pc` or `!dvs_step` can trigger the full PC-map-live-refresh cycle.
-

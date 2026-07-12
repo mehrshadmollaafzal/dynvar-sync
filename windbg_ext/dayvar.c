@@ -1,8 +1,9 @@
 /*
- * DayVar Sync WinDbg extension, Phase 2.
+ * dynvar-sync WinDbg extension.
  *
- * This phase implements connect/disconnect/status/pc_update only. DbgEng
- * PC/module extraction is isolated in dbgeng_ops.c.
+ * The extension implements connection commands, PC synchronization, bounded
+ * request pumping, runtime register/memory reads, and asynchronous stepping.
+ * DbgEng PC/module extraction is isolated in dbgeng_ops.c.
  */
 
 #define WIN32_LEAN_AND_MEAN

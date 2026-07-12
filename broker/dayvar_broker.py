@@ -246,7 +246,7 @@ class Broker:
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description="DayVar Sync JSONL/TCP broker")
+    parser = argparse.ArgumentParser(description="dynvar-sync JSONL/TCP broker")
     parser.add_argument("--host", default="127.0.0.1", help="host/interface to bind")
     parser.add_argument("--port", type=int, default=9100, help="TCP port to listen on")
     parser.add_argument("--verbose", action="store_true", help="enable verbose logs")

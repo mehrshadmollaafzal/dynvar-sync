@@ -1,26 +1,26 @@
 # Samples
 
-The sample clients provide broker/protocol testing before real IDA integration
-exists. `fake_ida_client.py` is persistent by default and can handle repeated
+The sample clients provide broker/protocol testing without requiring IDA.
+`fake_ida_client.py` is persistent by default and can handle repeated
 `!dvs_pc` commands from the WinDbg extension.
 
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host 127.0.0.1 --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
+python3 samples/fake_ida_client.py --host 127.0.0.1 --port 9100
 ```
 
 WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-!dvs_connect 172.28.70.90 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect <BROKER_HOST> 9100
 !dvs_pc
 !dvs_pc
 !dvs_disconnect
@@ -50,3 +50,8 @@ explicit memory watches, and more complex unsupported Hex-Rays temporaries.
 `vvar_probe/` now provides deterministic x64 definition/live/reuse landmarks,
 plus C `noinline` local probes, for manual register, stack, constant, and stale
 runtime-recovery validation.
+
+For the full IDA/WinDbg setup, use
+[`docs/09_installation.md`](../docs/09_installation.md). For smoke-test
+expectations, use
+[`docs/10_quick_start_validation.md`](../docs/10_quick_start_validation.md).

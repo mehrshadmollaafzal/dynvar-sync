@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide starts from a clean checkout of DayVarSync v0.1.0-research.
+This guide starts from a clean checkout of `dynvar-sync v0.1.0-research`.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ windbg_ext/  WinDbg extension source
 samples/     Fake clients, tests, and vvar_probe
 docs/        Architecture, testing, support, and release docs
 tools/       Reserved for helper scripts; no required release scripts yet
-ForCodex/    Original planning material, retained unchanged
+ForCodex/    Original planning material
 ```
 
 ## Start The Broker
@@ -31,7 +31,7 @@ ForCodex/    Original planning material, retained unchanged
 From the repository root:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
 ```
 
 Use the interface address that Windows can reach. For WSL, get the WSL address
@@ -82,7 +82,7 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 In WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
 !dvs_status
 ```
 
@@ -101,7 +101,7 @@ When prompted for the broker endpoint, use the broker host and port, for
 example:
 
 ```text
-172.28.70.90:9100
+<WSL_IP>:9100
 ```
 
 Expected broker log:
@@ -115,7 +115,7 @@ Expected broker log:
 In WinDbg, connect to the same broker:
 
 ```text
-!dvs_connect 172.28.70.90 9100
+!dvs_connect <WSL_IP> 9100
 ```
 
 Expected broker log:

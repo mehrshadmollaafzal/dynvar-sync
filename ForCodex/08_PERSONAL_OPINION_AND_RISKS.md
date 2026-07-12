@@ -124,6 +124,5 @@ is much better than a flashy tool that shows wrong values.
 ## Suggested README wording
 
 ```text
-dayvar-sync-version2 synchronizes IDA Pro and WinDbg Preview and displays confidence-tagged runtime values for supported Hex-Rays variables. The first version focuses on Windows x64 function arguments, stack arguments, explicit memory watches, and safe stale-state handling.
+dynvar-sync synchronizes IDA Pro and WinDbg Preview and displays confidence-tagged runtime values for supported Hex-Rays variables. The first version focuses on Windows x64 function arguments, stack arguments, explicit memory watches, and safe stale-state handling.
 ```
-

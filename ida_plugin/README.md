@@ -1,6 +1,7 @@
 # IDA Plugin
 
-IDAPython plugin for the current DayVarSync auto-live flow.
+IDAPython plugin for the current `dynvar-sync` auto-live flow. The IDA menu and
+table still use the established `DayVarSync` UI name.
 
 Responsibilities:
 
@@ -34,8 +35,11 @@ Load or run `dayvar_plugin.py` in IDA. The plugin registers these actions under
 `Connect` prompts for a broker `host:port` and defaults to:
 
 ```text
-172.28.70.90:9100
+127.0.0.1:9100
 ```
+
+For WSL/Windows deployments, enter the broker address reachable from Windows,
+for example `<WSL_IP>:9100`.
 
 The connection runs in a background socket thread so the IDA UI does not block
 when the broker is unavailable. Incoming messages are marshalled back onto the
@@ -177,10 +181,11 @@ Value display is normalized in the Live Variables table:
 
 ## Manual Test
 
-Start the broker in WSL:
+Use [../docs/09_installation.md](../docs/09_installation.md) for the full
+setup. The minimal WSL broker command is:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
 ```
 
 In IDA:
@@ -194,8 +199,8 @@ Open/decompile a function near the synced PC
 In WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-!dvs_connect 172.28.70.90 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect <WSL_IP> 9100
 !dvs_pc
 !dvs_step p 1
 ```

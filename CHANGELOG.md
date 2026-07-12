@@ -1,14 +1,14 @@
 # Changelog
 
-## DayVarSync v0.1.0-research
+## dynvar-sync v0.1.0-research
 
 Release identity:
 
 ```text
-DayVarSync v0.1.0-research
+dynvar-sync v0.1.0-research
 ```
 
-DayVarSync v0.1.0-research is a best-effort, confidence-aware research
+`dynvar-sync v0.1.0-research` is a best-effort, confidence-aware research
 prototype that synchronizes WinDbg runtime state with IDA Pro and recovers only
 Hex-Rays variables whose runtime values can be structurally proven.
 

@@ -1,7 +1,8 @@
 # Quick-Start Validation
 
-This smoke test verifies the v0.1.0-research transport, PC sync, argument
-recovery, stale transition, and one supported local when the sample permits it.
+This smoke test verifies the `dynvar-sync v0.1.0-research` transport, PC sync,
+argument recovery, stale transition, and one supported local when the sample
+permits it.
 
 ## User-Mode Smoke Test
 
@@ -17,20 +18,20 @@ recovery, stale transition, and one supported local when the sample permits it.
 4. Start the broker:
 
    ```bash
-   python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+   python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
    ```
 
 5. Load `ida_plugin/dayvar_plugin.py` in IDA and connect to:
 
    ```text
-   172.28.70.90:9100
+   <WSL_IP>:9100
    ```
 
 6. In WinDbg, load and connect the extension:
 
    ```text
-   .load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-   !dvs_connect 172.28.70.90 9100
+   .load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+   !dvs_connect <WSL_IP> 9100
    ```
 
 7. Stop at a function entry with known Windows x64 arguments, then run:

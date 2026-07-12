@@ -48,9 +48,9 @@ and leave propagated/ambiguous rows unavailable.
 ## IDA/WinDbg Procedure
 
 1. Load `build\vvar_probe.exe` and its PDB in IDA, decompile the three assembly
-   probe functions, and connect DayVarSync.
-2. Start the broker and connect the WinDbg extension as documented in the
-   project README.
+   probe functions, and connect the IDA plugin.
+2. Start the broker and connect the WinDbg extension as documented in
+   [`docs/09_installation.md`](../../docs/09_installation.md).
 3. For the register case:
 
    ```text

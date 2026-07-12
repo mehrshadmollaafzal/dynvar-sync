@@ -3,7 +3,7 @@
 Release identity:
 
 ```text
-DayVarSync v0.1.0-research
+dynvar-sync v0.1.0-research
 ```
 
 Completion for this release means:
@@ -70,11 +70,12 @@ Completion for this release means:
 
 Treat any of these as blockers:
 
-- source or docs describe DayVarSync as a source-level debugger;
+- source or docs describe `dynvar-sync` as a source-level debugger;
 - docs claim recovery of all Hex-Rays lvars;
 - broker or WinDbg extension interprets Hex-Rays variables;
 - unsupported values are displayed as exact current values;
 - old `pc_seq` responses can update current rows;
-- `ForCodex/` is modified;
+- `ForCodex/` is modified beyond privacy, project-name, or broken-link
+  cleanup;
 - a release commit or tag is created before the maintainer explicitly requests
   it.

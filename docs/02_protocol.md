@@ -29,9 +29,9 @@ Every PC-dependent request and response must carry `pc_seq` and `runtime_pc`
 when available. IDA must apply a response as fresh only when it matches the
 current `pc_seq` and pending `request_id`.
 
-## Phase 1 Message Types
+## Current Message Types
 
-Supported Phase 1 message types:
+Supported message types:
 
 - `hello`
 - `hello_ack`
@@ -42,8 +42,6 @@ Supported Phase 1 message types:
 - `mem_request`
 - `mem_response`
 - `error`
-
-Later phases may add `live_refresh_done`, `step_request`, and `step_response`.
 
 ## Broker Registration
 
@@ -111,7 +109,7 @@ stale.
 
 Protocol version starts at `1`. Breaking changes must increment it.
 
-## Phase 1 Manual Flow
+## Manual Routing Flow
 
 ```text
 fake_windbg -> broker -> fake_ida: pc_update
@@ -121,4 +119,6 @@ fake_windbg -> broker -> fake_ida: reg_response
 ```
 
 This tests routing and correlation fields only. It does not prove real
-debugger, IDA, or Hex-Rays behavior.
+debugger, IDA, or Hex-Rays behavior. Asynchronous stepping is exposed through
+the WinDbg `!dvs_step` command and sends a normal post-step `pc_update`; there
+is no separate step-request protocol message in v0.1.0-research.

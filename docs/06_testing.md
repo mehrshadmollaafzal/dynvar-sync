@@ -3,6 +3,11 @@
 Testing must focus on correctness because stale state or guessed variable
 mapping can show misleading runtime values.
 
+Use [09_installation.md](09_installation.md) for full setup commands and
+[10_quick_start_validation.md](10_quick_start_validation.md) for the canonical
+end-to-end smoke tests. This file keeps the lower-level test design and
+expected state transitions.
+
 ## Protocol Tests
 
 Use fake clients before using IDA or WinDbg.
@@ -65,16 +70,14 @@ Build `windbg_ext/dayvar.dll` on Windows with the Windows SDK / Visual Studio
 developer environment. The extension depends on `dbgeng.h`, WinSock2, and
 `Ws2_32.lib`. Build outputs should go under `windbg_ext/build/`.
 
-Current WSL/Windows test environment:
+WSL/Windows test environment placeholders:
 
 ```text
-Codex runs inside WSL.
 Broker runs inside WSL.
 WinDbg Preview runs on the Windows host.
 IDA Pro runs on the Windows host.
 
-WSL IP:     172.28.70.90
-Windows IP: 172.28.64.1
+Broker host: <WSL_IP>
 Broker port: 9100
 ```
 
@@ -103,20 +106,20 @@ x86_64-w64-mingw32-gcc -shared -Wall -Wextra \
 Terminal 1:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
 ```
 
 Terminal 2:
 
 ```bash
-python3 samples/fake_ida_client.py --host 172.28.70.90 --port 9100
+python3 samples/fake_ida_client.py --host <WSL_IP> --port 9100
 ```
 
 WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-!dvs_connect 172.28.70.90 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect <WSL_IP> 9100
 !dvs_pc
 !dvs_step p 1
 !dvs_disconnect
@@ -188,7 +191,7 @@ keeping the existing broker and WinDbg extension.
 Terminal 1 in WSL:
 
 ```bash
-python3 broker/dayvar_broker.py --host 172.28.70.90 --port 9100 --verbose
+python3 broker/dayvar_broker.py --host <WSL_IP> --port 9100 --verbose
 ```
 
 In IDA on the Windows host:
@@ -202,14 +205,14 @@ Open/decompile a function near the synced PC
 The connect action prompts for a broker endpoint. Use:
 
 ```text
-172.28.70.90:9100
+<WSL_IP>:9100
 ```
 
 In WinDbg:
 
 ```text
-.load C:\Users\Mehrshad\source\repos\dynvar-sync-version2\windbg_ext\build\dayvar.dll
-!dvs_connect 172.28.70.90 9100
+.load C:\path\to\dynvar-sync\windbg_ext\build\dayvar.dll
+!dvs_connect <WSL_IP> 9100
 !dvs_pc
 !dvs_step p 1
 ```

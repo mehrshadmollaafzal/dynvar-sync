@@ -47,7 +47,7 @@ Reason:
 ## Suggested repository layout
 
 ```text
-dayvar-sync-version2/
+dynvar-sync/
 ├── broker/
 │   ├── dayvar_broker.py
 │   ├── protocol.py
@@ -219,4 +219,3 @@ Never let WinDbg guess what a Hex-Rays variable means. WinDbg should only answer
 - What is the current RIP?
 
 IDA should convert Hex-Rays variables into those low-level requests.
-

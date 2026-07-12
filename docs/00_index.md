@@ -1,7 +1,7 @@
 # Documentation Index
 
-This directory adapts the planning material from `ForCodex/` into project
-documentation for the implementation tree.
+This directory adapts the planning material from `ForCodex/` into public
+project documentation for the implementation tree.
 
 - `01_architecture.md` - Broker-centered IDA/WinDbg architecture.
 - `02_protocol.md` - JSONL/TCP messages and correlation rules.
@@ -16,4 +16,5 @@ documentation for the implementation tree.
 - `10_quick_start_validation.md` - User-mode and kernel-mode smoke tests.
 - `release_notes_v0.1.0_research.md` - Concise v0.1.0-research release notes.
 
-The original `ForCodex/` planning folder is intentionally retained unchanged.
+The original `ForCodex/` planning folder is intentionally retained as planning
+material; public release docs live in this `docs/` directory.
