@@ -35,13 +35,10 @@ are implementation/UI identifiers; the public project name is `dynvar-sync`.
 ## Documentation
 
 - [Documentation index](docs/00_index.md)
-- [Installation](docs/09_installation.md)
-- [Troubleshooting](docs/11_troubleshooting.md)
+- [Installation](docs/06_installation.md)
 - [Support matrix and limitations](docs/07_research_prototype_status.md)
 - [Variable model](docs/03_variable_model.md)
-- [Testing](docs/06_testing.md)
 - [Release notes](docs/release_notes_v0.1.0_research.md)
-- [Changelog](CHANGELOG.md)
 
 ## Repository Layout
 
@@ -64,7 +61,7 @@ The public guide documents one simple setup:
 - All components connect to `127.0.0.1:9100`.
 
 
-Start with [Installation](docs/09_installation.md)
+Start with [Installation](docs/06_installation.md)
 
 ## Limitations
 
