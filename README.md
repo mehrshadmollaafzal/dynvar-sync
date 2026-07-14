@@ -36,7 +36,6 @@ are implementation/UI identifiers; the public project name is `dynvar-sync`.
 
 - [Documentation index](docs/00_index.md)
 - [Installation](docs/09_installation.md)
-- [Quick Start](docs/10_quick_start_validation.md)
 - [Troubleshooting](docs/11_troubleshooting.md)
 - [Support matrix and limitations](docs/07_research_prototype_status.md)
 - [Variable model](docs/03_variable_model.md)
