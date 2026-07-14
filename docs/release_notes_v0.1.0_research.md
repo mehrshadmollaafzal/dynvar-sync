@@ -27,4 +27,4 @@ See [Research Prototype Status](07_research_prototype_status.md) for the
 support matrix and detailed limitations.
 
 Before release sign-off, run the maintainer checks in
-[Release Checklist](08_release_checklist.md).
+[Release Checklist](05_release_checklist.md).
