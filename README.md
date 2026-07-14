@@ -1,11 +1,5 @@
 # dynvar-sync v0.1.0-research
 
-> [!IMPORTANT]
-> **Development disclosure:** This project was primarily implemented with
-> OpenAI Codex under human direction, review, and manual validation. It is a
-> vibe-coded research prototype and has not undergone a formal security or
-> production-readiness audit.
-
 WinDbg stops at an instruction. `dynvar-sync` moves IDA Pro to the
 corresponding address. The `DayVarSync Live Variables` view displays runtime
 values only when the IDA-side analysis can structurally prove where the value
@@ -15,6 +9,13 @@ currently lives.
 Windows x64 targets using IDA Pro 9.3, Hex-Rays, and WinDbg. It is not a
 source-level debugger, is not production-ready, and does not guarantee recovery
 of every Hex-Rays lvar.
+#
+> [!IMPORTANT]
+> **Development disclosure:** This project was primarily implemented with
+> OpenAI Codex under human direction, review, and manual validation. It is a
+> vibe-coded research prototype and has not undergone a formal security or
+> production-readiness audit.
+
 
 ## What It Does
 
