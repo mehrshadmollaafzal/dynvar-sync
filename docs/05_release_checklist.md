@@ -17,15 +17,13 @@ Completion for this release means:
 ## Maintainer Checks
 
 - Confirm `VERSION` contains `v0.1.0-research`.
-- Run the developer regression commands in [Testing](06_testing.md).
 - Build `windbg_ext\build\dayvar.dll` with the Windows SDK / Visual Studio
-  x64 Native Tools command documented in [Installation](09_installation.md).
+  x64 Native Tools command documented in [Installation](06_installation.md).
 - Install the IDA plugin by copying all `ida_plugin\*.py` files into the user
   IDA plugin directory and restarting IDA.
 - Start the broker on `127.0.0.1:9100`.
 - Connect IDA to `127.0.0.1:9100`.
 - Connect WinDbg with `!dvs_connect 127.0.0.1 9100`.
-- Run the user-mode smoke test in [Quick Start](10_quick_start_validation.md).
 - Run a kernel-mode smoke test when a matching kernel debugging environment is
   available.
 - Exercise diagnostic levels: `quiet`, `normal`, `verbose`, and `trace`.
