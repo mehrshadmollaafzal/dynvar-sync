@@ -1,4 +1,4 @@
-# dynvar-sync v0.1.0-research
+# dynvar-sync
 
 WinDbg stops at an instruction. `dynvar-sync` moves IDA Pro to the
 corresponding address. The `DayVarSync Live Variables` view displays runtime
