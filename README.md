@@ -64,8 +64,7 @@ The public guide documents one simple setup:
 - All components connect to `127.0.0.1:9100`.
 
 
-Start with [Installation](docs/09_installation.md), then run the manual
-[Quick Start](docs/10_quick_start_validation.md).
+Start with [Installation](docs/09_installation.md)
 
 ## Limitations
 
@@ -77,10 +76,3 @@ storage overwrite.
 
 See the [support matrix](docs/07_research_prototype_status.md) for the precise
 current boundary.
-
-## Validation
-
-See [Quick Start](docs/10_quick_start_validation.md) for a manual IDA/WinDbg
-smoke test.
-
-Developer regression commands are documented in [Testing](docs/06_testing.md).
