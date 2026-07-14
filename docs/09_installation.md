@@ -15,7 +15,7 @@ Custom network deployments are not covered by this guide.
 - Windows x64 target process or kernel debugging session.
 - IDA Pro 9.3 with Hex-Rays decompiler.
 - WinDbg Preview or WinDbg with DbgEng extension support.
-- Python 3 available through the Windows Python launcher `py -3`.
+- Python 3.12 or higher.
 - Windows SDK / Visual Studio x64 Native Tools Command Prompt for building the
   WinDbg extension.
 
