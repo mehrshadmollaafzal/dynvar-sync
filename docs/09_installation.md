@@ -48,15 +48,6 @@ Restart IDA after copying the files. Verify the plugin loaded by checking for:
 Edit -> DayVarSync
 ```
 
-To update the plugin later, repeat:
-
-```powershell
-Copy-Item `
-    .\ida_plugin\*.py `
-    "$env:APPDATA\Hex-Rays\IDA Pro\plugins" `
-    -Force
-```
-
 To uninstall the plugin cleanly, remove the installed files:
 
 ```powershell
