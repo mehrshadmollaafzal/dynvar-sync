@@ -19,6 +19,11 @@ Custom network deployments are not covered by this guide.
 - Windows SDK / Visual Studio x64 Native Tools Command Prompt for building the
   WinDbg extension.
 
+```bash
+git clone https://github.com/mehrshadmollaafzal/dynvar-sync.git
+cd dynvar-sync
+```
+
 ## Repository Layout
 
 ```text
