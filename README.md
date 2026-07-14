@@ -75,13 +75,11 @@ current boundary.
 
 ## Screenshots
 <p align="center">
-  <img src="screenshots/screenshots2.png"
-       alt="dynvar-sync WinDbg synchronization"
+  <img src="screenshots/Screenshot2.png"
        width="950">
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshots1.png"
-       alt="dynvar-sync WinDbg synchronization"
+  <img src="screenshots/Screenshot1.png"
        width="950">
 </p>
