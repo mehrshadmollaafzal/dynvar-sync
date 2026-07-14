@@ -72,3 +72,16 @@ storage overwrite.
 
 See the [support matrix](docs/07_research_prototype_status.md) for the precise
 current boundary.
+
+## Screenshots
+<p align="center">
+  <img src="screenshots/screenshots2.png"
+       alt="dynvar-sync WinDbg synchronization"
+       width="950">
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshots1.png"
+       alt="dynvar-sync WinDbg synchronization"
+       width="950">
+</p>
