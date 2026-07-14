@@ -24,17 +24,6 @@ git clone https://github.com/mehrshadmollaafzal/dynvar-sync.git
 cd dynvar-sync
 ```
 
-## Repository Layout
-
-```text
-broker\      Python JSONL/TCP broker
-ida_plugin\  IDAPython plugin modules
-windbg_ext\  WinDbg extension source
-samples\     Fake clients, tests, and vvar_probe
-docs\        Documentation
-tools\       Reserved helper-script area
-```
-
 ## Install The IDA Plugin
 
 The IDA plugin is multi-file. Install all Python modules from `ida_plugin\`,
