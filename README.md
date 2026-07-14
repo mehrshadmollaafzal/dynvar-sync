@@ -64,7 +64,6 @@ The public guide documents one simple setup:
 - The Python broker runs on Windows.
 - All components connect to `127.0.0.1:9100`.
 
-Custom network deployments are not covered by the guide.
 
 Start with [Installation](docs/09_installation.md), then run the manual
 [Quick Start](docs/10_quick_start_validation.md).
